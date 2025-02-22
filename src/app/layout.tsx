@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { Loading } from "@/components/loading";
 import { Logo } from "@/components/logo";
 import { HeaderActions } from "@/components/header-actions";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
               <HeaderActions />
             </header>
             <Suspense fallback={<Loading />}>{children}</Suspense>
+            <SpeedInsights />
           </ErrorBoundary>
         </ThemeProvider>
       </body>
