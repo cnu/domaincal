@@ -1,19 +1,19 @@
-import { AuthOptions } from "next-auth"
+import { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { compare } from "bcryptjs"
 import { prisma } from "./db"
+import { compare, hash } from "bcryptjs"
 
-export const authOptions: AuthOptions = {
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
-      name: "Credentials",
+      name: "credentials",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Missing credentials")
+          return null
         }
 
         try {
@@ -22,13 +22,29 @@ export const authOptions: AuthOptions = {
           })
 
           if (!user) {
-            throw new Error("Invalid email or password")
+            // Create new user
+            const hashedPassword = await hash(credentials.password, 10)
+            const newUser = await prisma.user.create({
+              data: {
+                email: credentials.email,
+                password: hashedPassword,
+              },
+            })
+
+            // Return the new user
+            return {
+              id: newUser.id.toString(),
+              email: newUser.email,
+            }
           }
 
-          const isValidPassword = await compare(credentials.password, user.password)
+          const isPasswordValid = await compare(
+            credentials.password,
+            user.password
+          )
 
-          if (!isValidPassword) {
-            throw new Error("Invalid email or password")
+          if (!isPasswordValid) {
+            return null
           }
 
           return {
@@ -37,15 +53,11 @@ export const authOptions: AuthOptions = {
           }
         } catch (error) {
           console.error("Auth error:", error)
-          throw new Error("Invalid credentials")
+          return null
         }
-      }
-    })
+      },
+    }),
   ],
-  pages: {
-    signIn: "/", // We'll handle this via modal
-    error: "/", // We'll handle errors in the modal
-  },
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
@@ -56,13 +68,42 @@ export const authOptions: AuthOptions = {
     },
     async session({ session, token }) {
       if (token) {
-        session.user = {
-          id: token.id as string,
-          email: token.email as string,
+        session.user.id = token.id
+        session.user.email = token.email
+
+        // If there are pending domains in the session, add them to the user's domains
+        if (session.pendingDomains?.length) {
+          try {
+            for (const domainName of session.pendingDomains) {
+              // Find or create domain
+              const domain = await prisma.domain.upsert({
+                where: { name: domainName },
+                create: { name: domainName },
+                update: {},
+              })
+
+              // Link domain to user
+              await prisma.userDomains.create({
+                data: {
+                  userId: BigInt(token.id),
+                  domainId: domain.id,
+                }
+              })
+            }
+
+            // Clear pending domains
+            delete session.pendingDomains
+          } catch (error) {
+            console.error("Error processing pending domains:", error)
+          }
         }
       }
       return session
-    }
+    },
+  },
+  pages: {
+    signIn: "/auth/signin",
+    error: "/auth/error",
   },
   session: {
     strategy: "jwt",

@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
 import { v4 as uuidv4 } from 'uuid'
+import { addPendingDomain } from "@/lib/pending-domains"
+import { useSession } from "next-auth/react"
 
 interface DomainInputProps {
   onSubmit: (domain: string) => Promise<void>
@@ -15,6 +17,7 @@ interface DomainInputProps {
 export function DomainInput({ onSubmit, isLoading }: DomainInputProps) {
   const { toast } = useToast()
   const [value, setValue] = React.useState("")
+  const { data: session } = useSession()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,10 +44,28 @@ export function DomainInput({ onSubmit, isLoading }: DomainInputProps) {
     }
 
     try {
+      if (!session) {
+        // Store domain in localStorage for anonymous users
+        addPendingDomain(domain)
+        setValue("")
+        
+        // Dispatch custom event to open auth dialog
+        const event = new CustomEvent('toggle-auth', { 
+          detail: { view: 'register' }
+        })
+        window.dispatchEvent(event)
+        return
+      }
+
       await onSubmit(domain)
       setValue("")
     } catch (error) {
-      // Error will be handled by the parent component
+      toast({
+        id: uuidv4(),
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to add domain",
+        variant: "destructive",
+      })
     }
   }
 

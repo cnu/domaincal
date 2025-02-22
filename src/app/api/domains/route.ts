@@ -1,7 +1,6 @@
-import { NextResponse } from "next/server"
-import { prisma } from "@/lib/db"
-import { Domain } from "@prisma/client"
+import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
+import prisma from "@/lib/prisma"
 import { authOptions } from "@/lib/auth"
 
 interface DomainResponse {
@@ -16,12 +15,12 @@ interface ErrorResponse {
   error: string
 }
 
-const serializeDomain = (domain: Domain): DomainResponse => ({
+const serializeDomain = (domain: any): DomainResponse => ({
   id: domain.id.toString(),
   name: domain.name,
   domainExpiryDate: domain.domainExpiryDate,
   createdAt: domain.createdAt,
-  updatedAt: domain.updatedAt,
+  updatedAt: domain.updatedAt
 })
 
 const validateDomain = (domain: string): boolean => {
@@ -36,23 +35,34 @@ const validateDomain = (domain: string): boolean => {
   }
 }
 
-export async function POST(req: Request) {
+export async function GET() {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const domains = await prisma.domain.findMany({
+    where: {
+      users: {
+        some: {
+          userId: BigInt(session.user.id)
+        }
+      }
+    }
+  })
+
+  return NextResponse.json({ domains: domains.map(serializeDomain) })
+}
+
+export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
-    
-    if (!session?.user?.id) {
-      return NextResponse.json<ErrorResponse>(
-        { error: "Unauthorized" },
-        { status: 401 }
-      )
-    }
+    const { domain } = await request.json()
 
-    const body = await req.json()
-    const domain = Array.isArray(body.domain) ? body.domain[0] : body.domain
-
-    if (!domain || typeof domain !== "string") {
-      return NextResponse.json<ErrorResponse>(
-        { error: "Domain is required and must be a string" },
+    if (!domain) {
+      return NextResponse.json(
+        { error: "Domain is required" },
         { status: 400 }
       )
     }
@@ -67,46 +77,54 @@ export async function POST(req: Request) {
       )
     }
 
-    // Try to find existing domain or create new one
-    const existingDomain = await prisma.domain.findUnique({
-      where: { name: domain },
-    })
-
-    let domainRecord: Domain
-
-    if (existingDomain) {
-      domainRecord = existingDomain
-    } else {
-      domainRecord = await prisma.domain.create({
-        data: {
-          name: domain,
-          domainExpiryDate: null, // Will be updated by WHOIS service
-        },
+    if (!session?.user?.id) {
+      // For anonymous users, just validate the domain and return
+      return NextResponse.json({ 
+        message: "Please sign in to track this domain",
+        requiresAuth: true,
+        domain: { name: domain }
       })
     }
 
-    // Create user-domain association if it doesn't exist
+    // Check if domain already exists
+    const existingDomain = await prisma.domain.findUnique({
+      where: { name: domain }
+    })
+
+    let domainId: bigint
+    if (!existingDomain) {
+      // Create new domain
+      const newDomain = await prisma.domain.create({
+        data: { name: domain }
+      })
+      domainId = newDomain.id
+    } else {
+      domainId = existingDomain.id
+    }
+
+    // Link domain to user
     await prisma.userDomains.upsert({
       where: {
         userId_domainId: {
           userId: BigInt(session.user.id),
-          domainId: domainRecord.id,
-        },
+          domainId
+        }
       },
       create: {
         userId: BigInt(session.user.id),
-        domainId: domainRecord.id,
+        domainId
       },
-      update: {}, // No updates needed if association exists
+      update: {} // No updates needed if association exists
     })
 
-    return NextResponse.json({
-      domain: serializeDomain(domainRecord),
+    return NextResponse.json({ 
+      message: "Domain added successfully",
+      domain: serializeDomain({ id: domainId, name: domain, domainExpiryDate: null, createdAt: new Date(), updatedAt: null })
     })
   } catch (error) {
-    console.error("Error processing domain:", error)
-    return NextResponse.json<ErrorResponse>(
-      { error: "Failed to process domain" },
+    console.error("Error adding domain:", error)
+    return NextResponse.json(
+      { error: "Failed to add domain" },
       { status: 500 }
     )
   }
