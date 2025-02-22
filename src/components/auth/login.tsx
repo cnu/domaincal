@@ -4,7 +4,7 @@ import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
 
 interface LoginProps {
   onLogin: (email: string, password: string) => void
@@ -20,10 +20,7 @@ export function Login({ onLogin }: LoginProps) {
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader>
-        <CardTitle>Welcome Back</CardTitle>
-      </CardHeader>
+    <Card className="w-full max-w-md mx-auto py-4">
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
           <div className="space-y-2">

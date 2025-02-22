@@ -1,0 +1,55 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          BigInt   @id @default(autoincrement())
+  email       String   @unique
+  password    String
+  lastLoginAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime? @updatedAt
+  domains     UserDomains[]
+
+  @@index([email])
+}
+
+model Domain {
+  id                BigInt   @id @default(autoincrement())
+  name              String   @unique
+  response          Json?
+  domainExpiryDate  DateTime?
+  domainCreatedDate DateTime?
+  domainUpdatedDate DateTime?
+  registrar         String?
+  emails           String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  users            UserDomains[]
+
+  @@index([name])
+}
+
+model UserDomains {
+  id        BigInt   @id @default(autoincrement())
+  userId    BigInt
+  domainId  BigInt
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, domainId])
+  @@index([userId])
+  @@index([domainId])
+}

@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+import Link from "next/link"
 
 interface LogoProps {
   className?: string
@@ -6,7 +7,7 @@ interface LogoProps {
 
 export const Logo = ({ className }: LogoProps) => {
   return (
-    <div className={cn("flex items-center gap-2", className)}>
+    <Link href="/" className={cn("flex items-center gap-2 hover:opacity-80 transition-opacity", className)}>
       <svg
         className="h-8 w-8"
         viewBox="0 0 100 100"
@@ -20,6 +21,6 @@ export const Logo = ({ className }: LogoProps) => {
         </g>
       </svg>
       <span className="text-xl font-bold">DomainCal</span>
-    </div>
+    </Link>
   )
 }

@@ -5,9 +5,8 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Loading } from "@/components/loading";
-import { Logo } from "@/components/logo";
-import { HeaderActions } from "@/components/header-actions";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Toaster } from "@/components/toaster";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -41,12 +40,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
           disableTransitionOnChange
         >
           <ErrorBoundary>
-            <header className="container flex items-center justify-between py-4">
-              <Logo />
-              <HeaderActions />
-            </header>
             <Suspense fallback={<Loading />}>{children}</Suspense>
             <SpeedInsights />
+            <Toaster />
           </ErrorBoundary>
         </ThemeProvider>
       </body>
