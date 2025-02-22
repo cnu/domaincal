@@ -6,7 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { Loading } from "@/components/loading";
 import { Logo } from "@/components/logo";
-import { ModeToggle } from "@/components/mode-toggle";
+import { HeaderActions } from "@/components/header-actions";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -42,7 +42,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
           <ErrorBoundary>
             <header className="container flex items-center justify-between py-4">
               <Logo />
-              <ModeToggle />
+              <HeaderActions />
             </header>
             <Suspense fallback={<Loading />}>{children}</Suspense>
           </ErrorBoundary>
