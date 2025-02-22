@@ -2,89 +2,89 @@
 
 import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
 import { v4 as uuidv4 } from 'uuid'
 
 interface DomainInputProps {
-  onSubmit: (domains: string[]) => Promise<void>
-  isSubmitting: boolean
+  onSubmit: (domain: string) => Promise<void>
+  isLoading: boolean
 }
 
-export function DomainInput({ onSubmit, isSubmitting }: DomainInputProps) {
-  const [value, setValue] = useState("")
+export function DomainInput({ onSubmit, isLoading }: DomainInputProps) {
   const { toast } = useToast()
-
-  const placeholder = `Enter domains (one per line), for example:
-example.com
-mydomain.org
-another-domain.net`
+  const [value, setValue] = React.useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const domains = value.split("\n").map(d => d.trim()).filter(Boolean)
+    const domain = value.trim()
     
-    if (domains.length === 0) {
-      const id = uuidv4()
+    if (!domain) {
       toast({
-        id,
+        id: uuidv4(),
         title: "Error",
-        description: "Please enter at least one domain",
+        description: "Please enter a domain",
         variant: "destructive",
       })
       return
     }
 
-    // Check for domains with spaces
-    const invalidDomains = domains.filter(d => d.includes(" "))
-    if (invalidDomains.length > 0) {
-      const id = uuidv4()
+    if (domain.includes(" ")) {
       toast({
-        id,
+        id: uuidv4(),
         title: "Error",
-        description: "Domains cannot contain spaces",
+        description: "Domain cannot contain spaces",
         variant: "destructive",
       })
       return
     }
 
     try {
-      await onSubmit(domains)
+      await onSubmit(domain)
       setValue("")
-    } catch {
-      const id = uuidv4()
-      toast({
-        id,
-        title: "Error",
-        description: "Failed to add domains",
-        variant: "destructive",
-      })
+    } catch (error) {
+      // Error will be handled by the parent component
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      void handleSubmit(e)
     }
   }
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
-        <CardTitle>Track Expiry of Multiple Domains in one place</CardTitle>
+        <CardTitle className="text-2xl font-semibold text-center">
+          Track Domain Expiry
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-      <Textarea
-          placeholder={placeholder}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          rows={6}
-          className="font-mono"
-        />
-        <Button 
-        type="submit"
-          onClick={handleSubmit} 
-          className="w-full"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? "Adding..." : "Track Domains"}
-        </Button>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Textarea
+            id="domain-input"
+            name="domain"
+            placeholder="Enter a domain (e.g., example.com)"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={2}
+            className="font-mono resize-none"
+            aria-label="Domain name input"
+            disabled={isLoading}
+          />
+          <Button 
+            type="submit"
+            className="w-full"
+            disabled={isLoading}
+            aria-label={isLoading ? "Adding domain..." : "Track domain"}
+          >
+            {isLoading ? "Adding..." : "Track Domain"}
+          </Button>
+        </form>
       </CardContent>
     </Card>
   )

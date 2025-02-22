@@ -1,17 +1,12 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { signIn, useSession } from "next-auth/react"
 import { DomainInput } from "@/components/domain-input"
 import { AuthDialog } from "@/components/auth/auth-dialog"
 import { Nav } from "@/components/nav"
 import { useToast } from "@/components/ui/use-toast"
-import { v4 as uuidv4 } from 'uuid';
-
-interface User {
-  id: string
-  email: string
-  lastLoginAt: Date
-}
+import { v4 as uuidv4 } from 'uuid'
 
 interface DomainResponse {
   error?: string
@@ -19,10 +14,10 @@ interface DomainResponse {
 }
 
 export default function Home() {
+  const { data: session } = useSession()
   const [isAuthOpen, setIsAuthOpen] = useState(false)
   const [authView, setAuthView] = useState<"login" | "register">("register")
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [user, setUser] = useState<User | null>(null)
   const { toast } = useToast()
 
   // Listen for auth dialog events
@@ -38,19 +33,16 @@ export default function Home() {
 
   const handleLogin = async (email: string, password: string): Promise<void> => {
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
       })
 
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || "Failed to login")
+      if (result?.error) {
+        throw new Error(result.error)
       }
 
-      const data = await response.json()
-      setUser(data.user)
       setIsAuthOpen(false)
       
       const id = uuidv4()
@@ -68,6 +60,7 @@ export default function Home() {
         description: message,
         variant: "destructive",
       })
+      throw error // Re-throw to prevent onSuccess from being called
     }
   }
 
@@ -84,16 +77,8 @@ export default function Home() {
         throw new Error(error.message || "Failed to register")
       }
 
-      const data = await response.json()
-      setUser(data.user)
-      setIsAuthOpen(false)
-      
-      const id = uuidv4()
-      toast({
-        id,
-        title: "Success",
-        description: "Registered successfully",
-      })
+      // After successful registration, log the user in
+      await handleLogin(email, password)
     } catch (error) {
       const id = uuidv4()
       const message = error instanceof Error ? error.message : "Failed to register"
@@ -103,78 +88,40 @@ export default function Home() {
         description: message,
         variant: "destructive",
       })
+      throw error // Re-throw to prevent onSuccess from being called
     }
   }
 
-  const handleLogout = async () => {
-    try {
-      const response = await fetch("/api/auth/logout", {
-        method: "POST",
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to logout")
-      }
-
-      setUser(null)
-      const id = uuidv4()
-      toast({
-        id,
-        title: "Success",
-        description: "Logged out successfully",
-      })
-    } catch (error) {
-      const id = uuidv4()
-      const message = error instanceof Error ? error.message : "Failed to logout"
-      toast({
-        id,
-        title: "Error",
-        description: message,
-        variant: "destructive",
-      })
-    }
-  }
-
-  const handleDomainSubmit = async (domains: string[]) => {
-    if (!user) {
-      const id = uuidv4()
-      toast({
-        id,
-        title: "Error",
-        description: "Please login to track domains",
-        variant: "destructive",
-      })
+  const handleDomainSubmit = async (domain: string) => {
+    if (!session) {
+      setAuthView("register")
+      setIsAuthOpen(true)
       return
     }
 
+    setIsSubmitting(true)
     try {
-      setIsSubmitting(true)
       const response = await fetch("/api/domains", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ domains, userId: user.id }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ domain }),
       })
 
       const data: DomainResponse = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to add domains")
+        throw new Error(data.error || "Failed to track domain")
       }
 
       const id = uuidv4()
       toast({
         id,
         title: "Success",
-        description: "Domains added successfully",
+        description: "Domain tracking started successfully",
       })
-
-      // Refresh domains list
-      // fetchDomains()
     } catch (error) {
       const id = uuidv4()
-      const message = error instanceof Error ? error.message : "Failed to add domains"
+      const message = error instanceof Error ? error.message : "Failed to track domain"
       toast({
         id,
         title: "Error",
@@ -186,34 +133,23 @@ export default function Home() {
     }
   }
 
-  const handleAuthSuccess = () => {
-    setIsAuthOpen(false)
-  }
-
   return (
-    <>
-      <Nav 
-        user={user} 
-        onAuthClick={() => setIsAuthOpen(true)}
-        onLogout={handleLogout}
-      />
+    <div className="min-h-screen bg-background">
+      <Nav onAuthClick={() => setIsAuthOpen(true)} />
       <main className="container mx-auto px-4 py-8">
-        <DomainInput 
-          onSubmit={handleDomainSubmit}
-          isSubmitting={isSubmitting}
-        />
+        <DomainInput onSubmit={handleDomainSubmit} isLoading={isSubmitting} />
       </main>
-      {isAuthOpen && (
-        <AuthDialog
-          isOpen={isAuthOpen}
-          onOpenChange={setIsAuthOpen}
-          view={authView}
-          onViewChange={setAuthView}
-          onSuccess={handleAuthSuccess}
-          onLogin={handleLogin}
-          onRegister={handleRegister}
-        />
-      )}
-    </>
+      <AuthDialog
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        view={authView}
+        onViewChange={setAuthView}
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        onSuccess={() => setIsAuthOpen(false)}
+        onOpenChange={setIsAuthOpen}
+        initialView="register"
+      />
+    </div>
   )
 }

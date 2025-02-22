@@ -2,17 +2,13 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import { Suspense } from "react";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
-import { ErrorBoundary } from "@/components/error-boundary";
-import { Loading } from "@/components/loading";
-import { SpeedInsights } from "@vercel/speed-insights/next";
-import { Toaster } from "@/components/toaster";
+import { Providers } from "./providers";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "DomainCal",
-  description: "A modern calendar app built with Next.js",
+  title: "Domain Calendar",
+  description: "Track your domain expiry dates",
 };
 
 export const viewport: Viewport = {
@@ -33,18 +29,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
     <html lang="en" suppressHydrationWarning>
       <head />
       <body className={inter.className}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <ErrorBoundary>
-            <Suspense fallback={<Loading />}>{children}</Suspense>
-            <SpeedInsights />
-            <Toaster />
-          </ErrorBoundary>
-        </ThemeProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

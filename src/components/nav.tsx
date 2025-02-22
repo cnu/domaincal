@@ -1,23 +1,27 @@
 "use client"
 
 import * as React from "react"
+import { signOut, useSession } from "next-auth/react"
 import { Button } from "@/components/ui/button"
 import { Logo } from "@/components/logo"
 import { ModeToggle } from "@/components/mode-toggle"
 
 interface NavProps {
-  user: { email: string } | null
   onAuthClick: () => void
-  onLogout: () => void
 }
 
-export function Nav({ user, onAuthClick, onLogout }: NavProps) {
+export function Nav({ onAuthClick }: NavProps) {
+  const { data: session } = useSession()
+
   const handleLoginClick = () => {
-    // Dispatch event to show login view in auth modal
     window.dispatchEvent(
       new CustomEvent("toggle-auth", { detail: { view: "login" } })
     )
     onAuthClick()
+  }
+
+  const handleLogout = async () => {
+    await signOut({ redirect: false })
   }
 
   return (
@@ -25,14 +29,14 @@ export function Nav({ user, onAuthClick, onLogout }: NavProps) {
       <div className="container mx-auto px-4 py-4 flex justify-between items-center">
         <Logo />
         <div className="flex items-center gap-4">
-          {user ? (
+          {session?.user ? (
             <>
               <span className="text-sm text-muted-foreground">
-                {user.email}
+                {session.user.email}
               </span>
               <Button 
                 variant="ghost" 
-                onClick={onLogout}
+                onClick={handleLogout}
                 aria-label="Logout"
               >
                 Logout
