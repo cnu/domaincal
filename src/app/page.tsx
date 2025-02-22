@@ -7,7 +7,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { ModeToggle } from "@/components/mode-toggle"
 
 export default function Home() {
   return (

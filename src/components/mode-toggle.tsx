@@ -24,8 +24,8 @@ const themeOptions: ThemeOption[] = [
 ]
 
 export function ModeToggle() {
-  const { setTheme, theme, resolvedTheme } = useTheme()
   const [mounted, setMounted] = React.useState(false)
+  const { theme, setTheme } = useTheme()
   const [isOpen, setIsOpen] = React.useState<boolean>(false)
 
   // After mounting, we have access to the theme
