@@ -3,14 +3,11 @@ import type {
   ToastActionElement,
 } from "@/components/ui/toast"
 
-export type ToastType = "default" | "destructive"
-
 interface Toast {
   id: string
   title?: string
   description?: React.ReactNode
   action?: ToastActionElement
-  type?: ToastType
   variant?: "default" | "destructive"
   className?: string
   open?: boolean

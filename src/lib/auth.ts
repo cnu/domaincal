@@ -1,7 +1,22 @@
-import { NextAuthOptions } from "next-auth"
-import CredentialsProvider from "next-auth/providers/credentials"
-import { prisma } from "./db"
-import { compare, hash } from "bcryptjs"
+import { NextAuthOptions, Session } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { prisma } from "./db";
+import { compare, hash } from "bcryptjs";
+import { JWT } from "next-auth/jwt";
+
+interface CustomSession extends Session {
+  user: {
+    id: string;
+    email: string;
+    name?: string | null;
+  };
+  pendingDomains?: string[];
+}
+
+interface CustomToken extends JWT {
+  id: string;
+  email: string;
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -13,92 +28,96 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          return null
+          return null;
         }
 
         try {
           const user = await prisma.user.findUnique({
             where: { email: credentials.email },
-          })
+          });
 
           if (!user) {
-            // Create new user
-            const hashedPassword = await hash(credentials.password, 10)
+            const hashedPassword = await hash(credentials.password, 10);
             const newUser = await prisma.user.create({
               data: {
                 email: credentials.email,
                 password: hashedPassword,
               },
-            })
+            });
 
-            // Return the new user
             return {
               id: newUser.id.toString(),
               email: newUser.email,
-            }
+            };
           }
 
           const isPasswordValid = await compare(
             credentials.password,
             user.password
-          )
+          );
 
           if (!isPasswordValid) {
-            return null
+            return null;
           }
 
           return {
             id: user.id.toString(),
             email: user.email,
-          }
+          };
         } catch (error) {
-          console.error("Auth error:", error)
-          return null
+          console.error("Auth error:", error);
+          return null;
         }
       },
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }): Promise<CustomToken> {
       if (user) {
-        token.id = user.id
-        token.email = user.email
+        token.id = user.id;
+        token.email = user.email;
       }
-      return token
+      return token as CustomToken;
     },
-    async session({ session, token }) {
-      if (token) {
-        session.user.id = token.id
-        session.user.email = token.email
+    async session({ session, token }): Promise<CustomSession> {
+      if (token && session.user) {
+        const customToken = token as CustomToken;
+        session.user.id = customToken.id;
+        session.user.email = customToken.email;
 
-        // If there are pending domains in the session, add them to the user's domains
-        if (session.pendingDomains?.length) {
+        const customSession = session as CustomSession;
+        if (customSession.pendingDomains?.length) {
           try {
-            for (const domainName of session.pendingDomains) {
-              // Find or create domain
+            for (const domainName of customSession.pendingDomains) {
               const domain = await prisma.domain.upsert({
                 where: { name: domainName },
                 create: { name: domainName },
                 update: {},
-              })
+              });
 
-              // Link domain to user
               await prisma.userDomains.create({
                 data: {
-                  userId: BigInt(token.id),
+                  userId: BigInt(customToken.id),
                   domainId: domain.id,
-                }
-              })
+                },
+              });
             }
 
-            // Clear pending domains
-            delete session.pendingDomains
+            delete customSession.pendingDomains;
           } catch (error) {
-            console.error("Error processing pending domains:", error)
+            console.error("Error processing pending domains:", error);
           }
         }
       }
-      return session
+
+      return {
+        ...session,
+        user: {
+          ...session.user,
+          id: (token as CustomToken).id,
+          email: (token as CustomToken).email,
+        },
+      } as CustomSession;
     },
   },
   pages: {
@@ -108,4 +127,4 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
-}
+};
