@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { getPendingDomains, clearPendingDomains } from "@/lib/pending-domains";
 import { useToast } from "@/components/ui/use-toast";
+import { PendingDomainsService } from "@/services/pending-domains.service";
 
 export function PendingDomainsHandler() {
   const { data: session } = useSession();
@@ -12,7 +12,7 @@ export function PendingDomainsHandler() {
   useEffect(() => {
     const processPendingDomains = async () => {
       if (session?.user) {
-        const pendingDomains = getPendingDomains();
+        const pendingDomains = PendingDomainsService.getPendingDomains();
         if (pendingDomains.length === 0) return;
 
         try {
@@ -32,7 +32,7 @@ export function PendingDomainsHandler() {
           });
 
           // Clear pending domains after successful processing
-          clearPendingDomains();
+          PendingDomainsService.clearPendingDomains();
         } catch (error) {
           console.error("Error processing pending domains:", error);
           toast({

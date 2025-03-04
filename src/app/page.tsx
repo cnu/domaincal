@@ -8,11 +8,6 @@ import { Nav } from "@/components/nav";
 import { useToast } from "@/components/ui/use-toast";
 import { v4 as uuidv4 } from "uuid";
 
-interface DomainResponse {
-  error?: string;
-  domains: { error?: string }[];
-}
-
 export default function Home() {
   const { data: session } = useSession();
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -86,8 +81,8 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to register");
+        const data = await response.json();
+        throw new Error(data.error || "Failed to register");
       }
 
       // After successful registration, log the user in
@@ -121,7 +116,7 @@ export default function Home() {
         body: JSON.stringify({ domain }),
       });
 
-      const data: DomainResponse = await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to track domain");
