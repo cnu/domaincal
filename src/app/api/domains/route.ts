@@ -1,53 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import prisma from "@/lib/prisma";
-import { authOptions } from "@/lib/auth";
-import { JsonValue } from "@prisma/client/runtime/library";
-
-interface DomainResponse {
-  id: string;
-  name: string;
-  domainExpiryDate: Date | null;
-  createdAt: Date;
-  updatedAt: Date | null;
-}
-
-interface ErrorResponse {
-  error: string;
-}
-
-interface Domain {
-  id: bigint;
-  name: string;
-  domainExpiryDate: Date | null;
-  domainCreatedDate: Date | null;
-  domainUpdatedDate: Date | null;
-  registrar: string | null;
-  emails: string | null;
-  response: JsonValue;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const serializeDomain = (domain: Domain): DomainResponse => ({
-  id: domain.id.toString(),
-  name: domain.name,
-  domainExpiryDate: domain.domainExpiryDate,
-  createdAt: domain.createdAt,
-  updatedAt: domain.updatedAt,
-});
-
-const validateDomain = (domain: string): boolean => {
-  if (!domain || domain.includes(" ") || !domain.includes(".")) return false;
-
-  try {
-    // Basic URL validation
-    new URL(`http://${domain}`);
-    return true;
-  } catch {
-    return false;
-  }
-};
+import { NextRequest } from "next/server";
+import { DomainController } from "@/controllers/domain.controller";
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);

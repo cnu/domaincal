@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./db";
 import { compare, hash } from "bcryptjs";
 import { JWT } from "next-auth/jwt";
+import { AuthService } from "@/services/auth.service";
 
 interface CustomSession extends Session {
   user: {
@@ -88,21 +89,10 @@ export const authOptions: NextAuthOptions = {
         const customSession = session as CustomSession;
         if (customSession.pendingDomains?.length) {
           try {
-            for (const domainName of customSession.pendingDomains) {
-              const domain = await prisma.domain.upsert({
-                where: { name: domainName },
-                create: { name: domainName },
-                update: {},
-              });
-
-              await prisma.userDomains.create({
-                data: {
-                  userId: BigInt(customToken.id),
-                  domainId: domain.id,
-                },
-              });
-            }
-
+            await AuthService.processPendingDomains(
+              customToken.id,
+              customSession.pendingDomains
+            );
             delete customSession.pendingDomains;
           } catch (error) {
             console.error("Error processing pending domains:", error);

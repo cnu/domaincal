@@ -102,8 +102,8 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to register");
+        const data = await response.json();
+        throw new Error(data.error || "Failed to register");
       }
 
       // After successful registration, log the user in
