@@ -1,6 +1,6 @@
 "use client"
 
-import * as React from "react"
+import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -31,15 +31,15 @@ export function AuthDialog({
   onLogin,
   onRegister,
 }: AuthDialogProps) {
-  const [currentView, setCurrentView] = React.useState(view)
+  const [currentView, setCurrentView] = useState(view)
 
   // Update view when view prop changes
-  React.useEffect(() => {
+  useEffect(() => {
     setCurrentView(view)
   }, [view])
 
   // Reset view when dialog closes
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isOpen) {
       setCurrentView(initialView)
     }
