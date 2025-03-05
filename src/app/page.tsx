@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { DomainInput } from "@/components/domain-input";
+import { DomainList } from "@/components/domain-list";
 import { AuthDialog } from "@/components/auth/auth-dialog";
 import { Nav } from "@/components/nav";
 import { useToast } from "@/components/ui/use-toast";
@@ -18,6 +19,7 @@ export default function Home() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authView, setAuthView] = useState<"login" | "register">("register");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [refreshDomainList, setRefreshDomainList] = useState(0);
   const { toast } = useToast();
 
   // Listen for auth dialog events
@@ -133,6 +135,9 @@ export default function Home() {
         title: "Success",
         description: "Domain tracking started successfully",
       });
+      
+      // Trigger domain list refresh
+      setRefreshDomainList(prev => prev + 1);
     } catch (error) {
       const id = uuidv4();
       const message =
@@ -153,6 +158,7 @@ export default function Home() {
       <Nav onAuthClick={() => setIsAuthOpen(true)} />
       <main className="container mx-auto px-4 py-8">
         <DomainInput onSubmit={handleDomainSubmit} isLoading={isSubmitting} />
+        <DomainList refreshTrigger={refreshDomainList} />
       </main>
       <AuthDialog
         isOpen={isAuthOpen}

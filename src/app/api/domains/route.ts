@@ -64,6 +64,12 @@ export async function GET() {
         },
       },
     },
+    orderBy: [
+      // Sort by expiry date (nulls last)
+      { domainExpiryDate: 'desc' },
+      // Secondary sort by name for domains with no expiry date
+      { name: 'asc' }
+    ],
   });
 
   return NextResponse.json({ domains: domains.map(serializeDomain) });
