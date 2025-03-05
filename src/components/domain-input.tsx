@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, useCallback, FormEvent } from "react";
 import {
   Card,
   CardContent,
@@ -33,18 +33,17 @@ export function DomainInput({ onSubmit, isLoading }: DomainInputProps) {
   const { data: session } = useSession();
 
   // Parse and validate domains from the input
-  const parseDomains = (
-    input: string
-  ): { domains: string[]; errors: string[] } => {
-    // Split by newlines or commas
-    const rawDomains = input
-      .split(/[\n,]+/)
-      .map((d) => d.trim())
-      .filter(Boolean); // Remove empty entries
+  const parseDomains = useCallback(
+    (input: string): { domains: string[]; errors: string[] } => {
+      // Split by newlines or commas
+      const rawDomains = input
+        .split(/[\n,]+/)
+        .map((d) => d.trim())
+        .filter(Boolean); // Remove empty entries
 
-    const uniqueDomains = new Set<string>();
-    const errors: string[] = [];
-    const validDomains: string[] = [];
+      const uniqueDomains = new Set<string>();
+      const errors: string[] = [];
+      const validDomains: string[] = [];
 
     // Check maximum domains limit first - this is a hard limit
     if (rawDomains.length > MAX_DOMAINS) {
@@ -74,11 +73,13 @@ export function DomainInput({ onSubmit, isLoading }: DomainInputProps) {
       validDomains.push(domain);
     }
 
-    return {
-      domains: validDomains,
-      errors,
-    };
-  };
+      return {
+        domains: validDomains,
+        errors,
+      };
+    },
+    []
+  );
 
   // Validate a single domain
   const validateDomain = (domain: string): boolean => {
