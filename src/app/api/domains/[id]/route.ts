@@ -3,10 +3,14 @@ import { getServerSession } from "next-auth";
 import prisma from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+// Define the context type for dynamic route parameters
+type RouteContext = {
+  params: Promise<{
+    id: string;
+  }>;
+};
+
+export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
     const session = await getServerSession(authOptions);
 
@@ -14,7 +18,9 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const domainId = params.id;
+    // Await the params Promise to get the id
+    const resolvedParams = await params;
+    const domainId = resolvedParams.id;
 
     // Check if domain exists and belongs to the user
     const userDomain = await prisma.userDomains.findUnique({

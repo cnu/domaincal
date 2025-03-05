@@ -1,10 +1,10 @@
 "use client"
 
-import * as React from "react"
+import { useState, useEffect, ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 
 interface ErrorBoundaryProps {
-  children: React.ReactNode
+  children: ReactNode
 }
 
 const ErrorFallback = ({ error, resetError }: { error: Error; resetError: () => void }) => {
@@ -33,7 +33,7 @@ const ErrorFallback = ({ error, resetError }: { error: Error; resetError: () => 
 }
 
 export const ErrorBoundary = ({ children }: ErrorBoundaryProps) => {
-  const [error, setError] = React.useState<Error | null>(null)
+  const [error, setError] = useState<Error | null>(null)
 
   const handleError = (error: Error) => {
     console.error("Application error:", error)
@@ -42,7 +42,7 @@ export const ErrorBoundary = ({ children }: ErrorBoundaryProps) => {
 
   const resetError = () => setError(null)
 
-  React.useEffect(() => {
+  useEffect(() => {
     window.onerror = (message, source, lineno, colno, error) => {
       handleError(error || new Error(String(message)))
       return true

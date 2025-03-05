@@ -1,6 +1,6 @@
 "use client"
 
-import * as React from "react"
+import { useState, useEffect, FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,15 +13,15 @@ interface RegisterProps {
 }
 
 export function Register({ onRegister }: RegisterProps) {
-  const [email, setEmail] = React.useState("")
-  const [password, setPassword] = React.useState("")
-  const [confirmPassword, setConfirmPassword] = React.useState("")
-  const [isSubmitting, setIsSubmitting] = React.useState(false)
-  const [passwordError, setPasswordError] = React.useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [passwordError, setPasswordError] = useState("")
   const { toast } = useToast()
 
   // Validate passwords whenever either field changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (password && confirmPassword) {
       if (password !== confirmPassword) {
         setPasswordError("Passwords do not match")
@@ -35,7 +35,7 @@ export function Register({ onRegister }: RegisterProps) {
     }
   }, [password, confirmPassword])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     
     if (password !== confirmPassword) {

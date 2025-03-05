@@ -1,6 +1,6 @@
 "use client"
 
-import * as React from "react"
+import { useState, useEffect, useCallback, KeyboardEvent } from "react"
 import { Moon, Sun } from "lucide-react"
 import { useTheme } from "next-themes"
 
@@ -24,16 +24,16 @@ const themeOptions: ThemeOption[] = [
 ]
 
 export function ModeToggle() {
-  const [mounted, setMounted] = React.useState(false)
+  const [mounted, setMounted] = useState(false)
   const { theme, setTheme } = useTheme()
-  const [isOpen, setIsOpen] = React.useState<boolean>(false)
+  const [isOpen, setIsOpen] = useState<boolean>(false)
 
   // After mounting, we have access to the theme
-  React.useEffect(() => {
+  useEffect(() => {
     setMounted(true)
   }, [])
 
-  const handleThemeChange = React.useCallback((newTheme: ThemeOption['value']) => {
+  const handleThemeChange = useCallback((newTheme: ThemeOption['value']) => {
     try {
       setTheme(newTheme)
     } catch (error) {
@@ -41,11 +41,11 @@ export function ModeToggle() {
     }
   }, [setTheme])
 
-  const handleOpenChange = React.useCallback((open: boolean) => {
+  const handleOpenChange = useCallback((open: boolean) => {
     setIsOpen(open)
   }, [])
 
-  const handleKeyDown = React.useCallback((event: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       setIsOpen(prev => !prev)
