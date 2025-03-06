@@ -1,5 +1,6 @@
 import { Domain as PrismaDomain } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
+import { DomainValidationService } from "@/services/domain-validation.service";
 
 export interface DomainModel {
   id: string;
@@ -31,13 +32,17 @@ export const serializeDomain = (domain: PrismaDomain): DomainResponse => ({
 });
 
 export const validateDomain = (domain: string): boolean => {
-  if (!domain || domain.includes(" ") || !domain.includes(".")) return false;
+  return DomainValidationService.validateDomain(domain);
+};
 
-  try {
-    // Basic URL validation
-    new URL(`http://${domain}`);
-    return true;
-  } catch {
-    return false;
-  }
+export const sanitizeDomain = (domain: string): string | null => {
+  return DomainValidationService.sanitizeDomain(domain);
+};
+
+export const processDomainList = (domains: string[]): {
+  validDomains: string[];
+  invalidDomains: string[];
+  duplicates: string[];
+} => {
+  return DomainValidationService.processDomainList(domains);
 };
