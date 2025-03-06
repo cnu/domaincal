@@ -131,7 +131,7 @@ export default function Home() {
 
     // Log the domains being submitted
     console.log(`Submitting ${domains.length} domains:`, domains);
-    
+
     if (domains.length > 20) {
       const id = uuidv4();
       toast({
@@ -152,36 +152,41 @@ export default function Home() {
       });
 
       const data: DomainResponse = await response.json();
-      console.log('API response:', data);
+      console.log("API response:", data);
 
       if (!response.ok) {
         // Handle specific error cases
         if (data.totalRequested && data.totalRequested > 20) {
-          throw new Error(`Too many domains: ${data.totalRequested}. Maximum allowed is 20.`);
+          throw new Error(
+            `Too many domains: ${data.totalRequested}. Maximum allowed is 20.`
+          );
         }
         throw new Error(data.error || "Failed to track domains");
       }
 
       // Create a detailed success message
-      let successMessage = '';
+      let successMessage = "";
       if (data.added && data.added > 0) {
-        successMessage = data.added === 1 
-          ? "1 domain added successfully" 
-          : `${data.added} domains added successfully`;
+        successMessage =
+          data.added === 1
+            ? "1 domain added successfully"
+            : `${data.added} domains added successfully`;
       }
 
       // Add information about skipped/duplicate domains if any
       if (data.skipped && data.skipped > 0) {
-        successMessage += data.skipped === 1 
-          ? ", 1 domain already tracked" 
-          : `, ${data.skipped} domains already tracked`;
+        successMessage +=
+          data.skipped === 1
+            ? ", 1 domain already tracked"
+            : `, ${data.skipped} domains already tracked`;
       }
 
       // Add information about failed domains if any
       if (data.failed && data.failed > 0) {
-        successMessage += data.failed === 1 
-          ? ", 1 domain failed" 
-          : `, ${data.failed} domains failed`;
+        successMessage +=
+          data.failed === 1
+            ? ", 1 domain failed"
+            : `, ${data.failed} domains failed`;
       }
 
       const id = uuidv4();
@@ -189,23 +194,23 @@ export default function Home() {
         id,
         title: "Domain Tracking Update",
         description: successMessage || "Domain processing completed",
-        variant: data.added && data.added > 0 ? "default" : "destructive",
+        variant: "default",
       });
-      
+
       // If there were specific failures, show them in a separate toast
       if (data.failedDomains && data.failedDomains.length > 0) {
         const failId = uuidv4();
         toast({
           id: failId,
           title: "Failed Domains",
-          description: `Failed to process: ${data.failedDomains.join(', ')}`,
+          description: `Failed to process: ${data.failedDomains.join(", ")}`,
           variant: "destructive",
         });
       }
-      
+
       // Trigger domain list refresh if any domains were added
       if (data.added && data.added > 0) {
-        setRefreshDomainList(prev => prev + 1);
+        setRefreshDomainList((prev) => prev + 1);
       }
     } catch (error) {
       const id = uuidv4();

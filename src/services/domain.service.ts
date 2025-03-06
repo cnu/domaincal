@@ -3,6 +3,8 @@ import {
   DomainResponse,
   serializeDomain,
   validateDomain,
+  sanitizeDomain,
+  processDomainList,
 } from "@/models/domain.model";
 
 export class DomainService {
@@ -30,21 +32,22 @@ export class DomainService {
     userId: string,
     domainName: string
   ): Promise<DomainResponse> {
-    // Validate domain
-    if (!validateDomain(domainName.trim())) {
+    // Sanitize and validate domain
+    const sanitizedDomain = sanitizeDomain(domainName);
+    if (!sanitizedDomain || !validateDomain(sanitizedDomain)) {
       throw new Error("Invalid domain format");
     }
 
     // Check if domain already exists
     const existingDomain = await prisma.domain.findUnique({
-      where: { name: domainName },
+      where: { name: sanitizedDomain },
     });
 
     let domainId: bigint;
     if (!existingDomain) {
       // Create new domain
       const newDomain = await prisma.domain.create({
-        data: { name: domainName },
+        data: { name: sanitizedDomain },
       });
       domainId = newDomain.id;
     } else {
@@ -83,5 +86,94 @@ export class DomainService {
    */
   static validateDomainOnly(domainName: string): boolean {
     return validateDomain(domainName.trim());
+  }
+
+  /**
+   * Sanitize a domain without adding it
+   */
+  static sanitizeDomainOnly(domainName: string): string | null {
+    return sanitizeDomain(domainName);
+  }
+
+  /**
+   * Process multiple domains for a user
+   * @param userId User ID
+   * @param domainNames Array of domain names
+   * @returns Object with results of processing
+   */
+  static async addMultipleDomainsForUser(
+    userId: string,
+    domainNames: string[]
+  ): Promise<{
+    added: DomainResponse[];
+    invalid: string[];
+    duplicates: string[];
+  }> {
+    const { validDomains, invalidDomains, duplicates } = processDomainList(domainNames);
+    
+    const added: DomainResponse[] = [];
+    const dbDuplicates: string[] = [];
+    
+    // Process each valid domain
+    for (const domain of validDomains) {
+      try {
+        // Check if domain already exists in the database
+        const existingDomain = await prisma.domain.findUnique({
+          where: { name: domain },
+        });
+
+        let domainId: bigint;
+        if (!existingDomain) {
+          // Create new domain
+          const newDomain = await prisma.domain.create({
+            data: { name: domain },
+          });
+          domainId = newDomain.id;
+        } else {
+          domainId = existingDomain.id;
+          
+          // Check if user already has this domain
+          const existingUserDomain = await prisma.userDomains.findUnique({
+            where: {
+              userId_domainId: {
+                userId: BigInt(userId),
+                domainId,
+              },
+            },
+          });
+          
+          if (existingUserDomain) {
+            dbDuplicates.push(domain);
+            continue;
+          }
+        }
+
+        // Link domain to user
+        await prisma.userDomains.create({
+          data: {
+            userId: BigInt(userId),
+            domainId,
+          },
+        });
+
+        // Return domain data
+        const domainData = await prisma.domain.findUnique({
+          where: { id: domainId },
+        });
+
+        if (domainData) {
+          added.push(serializeDomain(domainData));
+        }
+      } catch (error) {
+        console.error(`Error adding domain ${domain}:`, error);
+        invalidDomains.push(domain);
+      }
+    }
+    
+    return {
+      added,
+      invalid: invalidDomains,
+      duplicates: [...duplicates, ...dbDuplicates],
+    };
   }
 }

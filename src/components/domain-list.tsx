@@ -8,6 +8,7 @@ import { Trash2, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import Fuse from "fuse.js";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 
 interface Domain {
   id: string;
@@ -337,87 +338,93 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
   }
 
   return (
-    <div className="mt-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold">Your Domains</h2>
+    <Card className="mt-8 w-full max-w-2xl mx-auto">
+      <CardHeader>
+        <div className="flex flex-col md:flex-row md:items-center justify-between">
+          <CardTitle className="text-2xl font-bold">Your Domains</CardTitle>
 
-        <div className="relative mt-2 md:mt-0 md:w-64">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search domains..."
-            className="pl-8"
-            value={searchQuery}
-            onChange={handleSearch}
-          />
-        </div>
-      </div>
-
-      {loading ? (
-        <p>Loading domains...</p>
-      ) : domains.length === 0 ? (
-        <p>No domains added yet.</p>
-      ) : filteredDomains.length === 0 ? (
-        <p>No domains match your search.</p>
-      ) : (
-        <>
-          <div className="text-sm text-muted-foreground mb-2">
-            Showing {Math.min(DOMAINS_PER_PAGE, sortedDomains.length)} of{" "}
-            {totalDomains} domains
-            {searchQuery && ` (filtered from ${domains.length} total)`}
+          <div className="relative mt-2 md:mt-0 md:w-64">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search domains..."
+              className="pl-8"
+              value={searchQuery}
+              onChange={handleSearch}
+            />
           </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <p>Loading domains...</p>
+        ) : domains.length === 0 ? (
+          <p>No domains added yet.</p>
+        ) : filteredDomains.length === 0 ? (
+          <p>No domains match your search.</p>
+        ) : (
+          <>
+            <div className="text-sm text-muted-foreground mb-2">
+              Showing {Math.min(DOMAINS_PER_PAGE, sortedDomains.length)} of{" "}
+              {totalDomains} domains
+              {searchQuery && ` (filtered from ${domains.length} total)`}
+            </div>
 
-          <div className="space-y-4">
-            {sortedDomains.map((domain) => (
-              <div
-                key={domain.id}
-                className="border rounded-lg p-4 flex items-center justify-between"
-              >
-                <div className="flex items-center space-x-4">
-                  <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
-                    <div className="text-center">
-                      {domain.domainExpiryDate ? (
-                        <>
-                          <div className="text-sm">
-                            {format(
-                              new Date(domain.domainExpiryDate),
-                              "dd MMMM"
-                            )}
-                          </div>
-                          <div className="font-bold">
-                            {format(new Date(domain.domainExpiryDate), "yyyy")}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="text-2xl font-bold">...</div>
-                      )}
+            <div className="space-y-4">
+              {sortedDomains.map((domain) => (
+                <div
+                  key={domain.id}
+                  className="border rounded-lg p-4 flex items-center justify-between"
+                >
+                  <div className="flex items-center space-x-4">
+                    <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+                      <div className="text-center">
+                        {domain.domainExpiryDate ? (
+                          <>
+                            <div className="text-sm">
+                              {format(
+                                new Date(domain.domainExpiryDate),
+                                "dd MMMM"
+                              )}
+                            </div>
+                            <div className="font-bold">
+                              {format(
+                                new Date(domain.domainExpiryDate),
+                                "yyyy"
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-2xl font-bold">...</div>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="font-bold">{domain.name}</span>
                     </div>
                   </div>
-                  <div>
-                    <span className="font-bold">{domain.name}</span>
-                  </div>
+                  <button
+                    onClick={() => handleDeleteDomain(domain.id)}
+                    disabled={deletingDomainId === domain.id}
+                    className="text-gray-500 hover:text-red-500 transition-colors"
+                    aria-label={`Delete ${domain.name}`}
+                  >
+                    <Trash2 size={20} />
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleDeleteDomain(domain.id)}
-                  disabled={deletingDomainId === domain.id}
-                  className="text-gray-500 hover:text-red-500 transition-colors"
-                  aria-label={`Delete ${domain.name}`}
-                >
-                  <Trash2 size={20} />
-                </button>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
 
-          {/* Debug pagination info */}
-          <div className="text-xs text-muted-foreground mt-4">
-            Debug: {totalDomains} total domains, {totalPages} pages, currently
-            on page {currentPage}
-          </div>
+            {/* Debug pagination info */}
+            <div className="text-xs text-muted-foreground mt-4">
+              Debug: {totalDomains} total domains, {totalPages} pages, currently
+              on page {currentPage}
+            </div>
 
-          {/* Always render pagination */}
-          {renderPagination()}
-        </>
-      )}
-    </div>
+            {/* Always render pagination */}
+            {totalDomains > 10 && renderPagination()}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
