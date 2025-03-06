@@ -245,7 +245,8 @@ export function DomainInput({ onSubmit, isLoading }: DomainInputProps) {
             <Textarea
               id="domain-input"
               name="domain"
-              placeholder="Enter domains (e.g., example.com, domain.org)\nOr one domain per line"
+              placeholder={`Enter domains (e.g., example.com, domain.org)
+Or one domain per line`}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               rows={5}
