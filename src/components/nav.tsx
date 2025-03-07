@@ -6,18 +6,19 @@ import { Button } from "@/components/ui/button"
 import { Logo } from "@/components/logo"
 import { ModeToggle } from "@/components/mode-toggle"
 
-interface NavProps {
-  onAuthClick: () => void
-}
-
-export function Nav({ onAuthClick }: NavProps) {
+export function Nav() {
   const { data: session } = useSession()
 
   const handleLoginClick = () => {
     window.dispatchEvent(
       new CustomEvent("toggle-auth", { detail: { view: "login" } })
     )
-    onAuthClick()
+  }
+
+  const handleRegisterClick = () => {
+    window.dispatchEvent(
+      new CustomEvent("toggle-auth", { detail: { view: "register" } })
+    )
   }
 
   const handleLogout = async () => {
@@ -43,13 +44,22 @@ export function Nav({ onAuthClick }: NavProps) {
               </Button>
             </>
           ) : (
-            <Button 
-              variant="ghost" 
-              onClick={handleLoginClick}
-              aria-label="Open login dialog"
-            >
-              Login
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="ghost" 
+                onClick={handleLoginClick}
+                aria-label="Open login dialog"
+              >
+                Login
+              </Button>
+              <Button 
+                variant="default" 
+                onClick={handleRegisterClick}
+                aria-label="Open register dialog"
+              >
+                Register
+              </Button>
+            </div>
           )}
           <ModeToggle />
         </div>

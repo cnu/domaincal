@@ -16,9 +16,9 @@ interface AuthDialogProps {
   initialView?: "login" | "register"
   view: "login" | "register"
   onViewChange: (view: "login" | "register") => void
-  onSuccess: () => void
   onLogin: (email: string, password: string) => void
   onRegister: (email: string, password: string) => void
+  isLoading?: boolean
 }
 
 export function AuthDialog({
@@ -27,9 +27,9 @@ export function AuthDialog({
   initialView = "register",
   view,
   onViewChange,
-  onSuccess,
   onLogin,
   onRegister,
+  isLoading = false,
 }: AuthDialogProps) {
   const [currentView, setCurrentView] = useState(view)
 
@@ -56,10 +56,8 @@ export function AuthDialog({
         {currentView === "register" ? (
           <div className="space-y-4">
             <Register
-              onRegister={async (email, password) => {
-                await onRegister(email, password)
-                onSuccess()
-              }}
+              onRegister={onRegister}
+              isLoading={isLoading}
             />
             <p className="text-center text-sm">
               Already have an account?{" "}
@@ -69,6 +67,7 @@ export function AuthDialog({
                   onViewChange("login")
                 }}
                 className="text-primary hover:underline"
+                disabled={isLoading}
               >
                 Login here
               </button>
@@ -77,10 +76,8 @@ export function AuthDialog({
         ) : (
           <div className="space-y-4">
             <Login
-              onLogin={async (email, password) => {
-                await onLogin(email, password)
-                onSuccess()
-              }}
+              onLogin={onLogin}
+              isLoading={isLoading}
             />
             <p className="text-center text-sm">
               Don&apos;t have an account?{" "}
@@ -90,6 +87,7 @@ export function AuthDialog({
                   onViewChange("register")
                 }}
                 className="text-primary hover:underline"
+                disabled={isLoading}
               >
                 Register here
               </button>

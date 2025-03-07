@@ -10,13 +10,13 @@ import { v4 as uuidv4 } from 'uuid'
 
 interface RegisterProps {
   onRegister: (email: string, password: string) => void
+  isLoading?: boolean
 }
 
-export function Register({ onRegister }: RegisterProps) {
+export function Register({ onRegister, isLoading = false }: RegisterProps) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [passwordError, setPasswordError] = useState("")
   const { toast } = useToast()
 
@@ -60,14 +60,7 @@ export function Register({ onRegister }: RegisterProps) {
       return
     }
 
-    setIsSubmitting(true)
-    try {
-      onRegister(email, password)
-    } catch (error) {
-      console.error("Registration error:", error)
-    } finally {
-      setIsSubmitting(false)
-    }
+    onRegister(email, password)
   }
 
   return (
@@ -83,6 +76,7 @@ export function Register({ onRegister }: RegisterProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={isLoading}
             />
           </div>
           <div className="space-y-2">
@@ -95,6 +89,7 @@ export function Register({ onRegister }: RegisterProps) {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
+              disabled={isLoading}
             />
           </div>
           <div className="space-y-2">
@@ -106,19 +101,16 @@ export function Register({ onRegister }: RegisterProps) {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
+              disabled={isLoading}
             />
             {passwordError && (
-              <p className="text-sm text-destructive mt-1">{passwordError}</p>
+              <p className="text-sm text-red-500 mt-1">{passwordError}</p>
             )}
           </div>
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">
-          <Button 
-            type="submit" 
-            className="w-full" 
-            disabled={isSubmitting || !!passwordError}
-          >
-            {isSubmitting ? "Registering..." : "Register"}
+          <Button type="submit" className="w-full" disabled={isLoading || passwordError !== ""}>
+            {isLoading ? "Creating account..." : "Create Account"}
           </Button>
         </CardFooter>
       </form>

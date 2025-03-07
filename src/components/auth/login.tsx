@@ -8,9 +8,10 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card"
 
 interface LoginProps {
   onLogin: (email: string, password: string) => void
+  isLoading?: boolean
 }
 
-export function Login({ onLogin }: LoginProps) {
+export function Login({ onLogin, isLoading = false }: LoginProps) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
 
@@ -32,6 +33,7 @@ export function Login({ onLogin }: LoginProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              disabled={isLoading}
             />
           </div>
           <div className="space-y-2">
@@ -43,12 +45,13 @@ export function Login({ onLogin }: LoginProps) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              disabled={isLoading}
             />
           </div>
         </CardContent>
         <CardFooter className="flex flex-col space-y-4">
-          <Button type="submit" className="w-full">
-            Login
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? "Logging in..." : "Login"}
           </Button>
         </CardFooter>
       </form>
