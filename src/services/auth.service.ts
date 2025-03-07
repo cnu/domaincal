@@ -1,3 +1,4 @@
+import { toast } from "@/components/ui/use-toast";
 import { prisma } from "@/lib/prisma";
 import { serializeUser, UserResponse } from "@/models/user.model";
 import { hash, compare } from "bcryptjs";
@@ -6,14 +7,22 @@ export class AuthService {
   /**
    * Register a new user
    */
-  static async registerUser(email: string, password: string): Promise<UserResponse> {
+  static async registerUser(
+    email: string,
+    password: string
+  ): Promise<UserResponse> {
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
       where: { email },
     });
 
     if (existingUser) {
-      throw new Error("Email already registered");
+      toast({
+        id: "already-registered-email",
+        title: "Error",
+        description: "Email already registered",
+        variant: "destructive",
+      });
     }
 
     // Hash password
@@ -33,7 +42,10 @@ export class AuthService {
   /**
    * Authenticate a user
    */
-  static async authenticateUser(email: string, password: string): Promise<UserResponse | null> {
+  static async authenticateUser(
+    email: string,
+    password: string
+  ): Promise<UserResponse | null> {
     const user = await prisma.user.findUnique({
       where: { email },
     });
@@ -60,7 +72,10 @@ export class AuthService {
   /**
    * Process pending domains for a user after authentication
    */
-  static async processPendingDomains(userId: string, pendingDomains: string[]): Promise<void> {
+  static async processPendingDomains(
+    userId: string,
+    pendingDomains: string[]
+  ): Promise<void> {
     if (!pendingDomains.length) return;
 
     try {
@@ -80,7 +95,12 @@ export class AuthService {
       }
     } catch (error) {
       console.error("Error processing pending domains:", error);
-      throw new Error("Failed to process pending domains");
+      toast({
+        id: "failed-processing-domains",
+        title: "Error",
+        description: "Failed to process pending domains",
+        variant: "destructive",
+      });
     }
   }
 }

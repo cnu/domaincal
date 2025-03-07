@@ -1,7 +1,8 @@
-import NextAuth from "next-auth"
-import CredentialsProvider from "next-auth/providers/credentials"
-import { compare } from "bcryptjs"
-import { prisma } from "@/lib/db"
+import NextAuth from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { compare } from "bcryptjs";
+import { prisma } from "@/lib/db";
+import { toast } from "@/components/ui/use-toast";
 
 const handler = NextAuth({
   providers: [
@@ -9,38 +10,64 @@ const handler = NextAuth({
       name: "Credentials",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" }
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error("Missing credentials")
+          toast({
+            id: "missing-cred",
+            title: "Error",
+            description: "Missing credentials",
+            variant: "destructive",
+          });
+          return null;
         }
 
         try {
           const user = await prisma.user.findUnique({
             where: { email: credentials.email },
-          })
+          });
 
           if (!user) {
-            throw new Error("Invalid email or password")
+            toast({
+              id: "invalid-email-pwd",
+              title: "Error",
+              description: "Invalid email or password",
+              variant: "destructive",
+            });
+            return null;
           }
 
-          const isValidPassword = await compare(credentials.password, user.password)
+          const isValidPassword = await compare(
+            credentials.password,
+            user.password
+          );
 
           if (!isValidPassword) {
-            throw new Error("Invalid email or password")
+            toast({
+              id: "invalid-email-pwd",
+              title: "Error",
+              description: "Invalid email or password",
+              variant: "destructive",
+            });
           }
 
           return {
             id: user.id.toString(),
             email: user.email,
-          }
+          };
         } catch (error) {
-          console.error("Auth error:", error)
-          throw new Error("Invalid credentials")
+          console.error("Auth error:", error);
+          toast({
+            id: "invalid-cred",
+            title: "Error",
+            description: "Invalid Credentials",
+            variant: "destructive",
+          });
+          return null;
         }
-      }
-    })
+      },
+    }),
   ],
   pages: {
     signIn: "/", // We'll handle this via modal
@@ -49,24 +76,24 @@ const handler = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = user.id
-        token.email = user.email
+        token.id = user.id;
+        token.email = user.email;
       }
-      return token
+      return token;
     },
     async session({ session, token }) {
       if (token) {
         session.user = {
           id: token.id as string,
           email: token.email as string,
-        }
+        };
       }
-      return session
-    }
+      return session;
+    },
   },
   session: {
     strategy: "jwt",
   },
-})
+});
 
-export { handler as GET, handler as POST }
+export { handler as GET, handler as POST };

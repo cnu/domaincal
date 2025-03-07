@@ -79,7 +79,12 @@ export const useDomains = (
       const response = await fetch(url);
 
       if (!response.ok) {
-        throw new Error("Failed to fetch domains");
+        toast({
+          id: "domains-error",
+          title: "Error",
+          description: "Failed to fetch domains",
+          variant: "destructive",
+        });
       }
 
       return (await response.json()) as DomainResponse;
@@ -124,11 +129,19 @@ export function useAddDomains() {
       if (!response.ok) {
         // Handle specific error cases
         if (data.totalRequested && data.totalRequested > 20) {
-          throw new Error(
-            `Too many domains: ${data.totalRequested}. Maximum allowed is 20.`
-          );
+          toast({
+            id: "too-many-domains",
+            title: "Error",
+            description: `Too many domains: ${data.totalRequested}. Maximum allowed is 20.`,
+            variant: "destructive",
+          });
         }
-        throw new Error(data.error || "Failed to track domains");
+        toast({
+          id: "failed-to-track-domains",
+          title: "Error",
+          description: data.error || "Failed to track domains",
+          variant: "destructive",
+        });
       }
 
       return data as DomainSubmitResponse;
@@ -206,7 +219,12 @@ export function useDeleteDomain() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || "Failed to delete domain");
+        toast({
+          id: "failed-deleting-domains",
+          title: "Error",
+          description: data.error || "Failed to delete domain",
+          variant: "destructive",
+        });
       }
 
       return domainId;
