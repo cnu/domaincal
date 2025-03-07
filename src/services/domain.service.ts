@@ -1,4 +1,3 @@
-import { toast } from "@/components/ui/use-toast";
 import { prisma } from "@/lib/prisma";
 import {
   DomainResponse,
@@ -36,14 +35,8 @@ export class DomainService {
     // Sanitize and validate domain
     const sanitizedDomain = sanitizeDomain(domainName);
     if (!sanitizedDomain || !validateDomain(sanitizedDomain)) {
-      toast({
-        id: "invalid-domains",
-        title: "Error",
-        description: "Invalid domain format",
-        variant: "destructive",
-      });
-      
       // Return a default DomainResponse object with error indication
+      // We use an empty id to indicate an error state that the UI can check for
       return {
         id: "",
         name: domainName,

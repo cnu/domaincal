@@ -1,4 +1,3 @@
-import { toast } from "@/components/ui/use-toast";
 import { prisma } from "@/lib/prisma";
 import { serializeUser, UserResponse } from "@/models/user.model";
 import { hash, compare } from "bcryptjs";
@@ -17,12 +16,8 @@ export class AuthService {
     });
 
     if (existingUser) {
-      toast({
-        id: "already-registered-email",
-        title: "Error",
-        description: "Email already registered",
-        variant: "destructive",
-      });
+      // Return null or throw an error that can be handled by the UI layer
+      throw new Error("Email already registered");
     }
 
     // Hash password
@@ -95,12 +90,8 @@ export class AuthService {
       }
     } catch (error) {
       console.error("Error processing pending domains:", error);
-      toast({
-        id: "failed-processing-domains",
-        title: "Error",
-        description: "Failed to process pending domains",
-        variant: "destructive",
-      });
+      // Log the error but don't use toast in server-side code
+      throw new Error("Failed to process pending domains");
     }
   }
 }
