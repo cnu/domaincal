@@ -40,7 +40,7 @@ export const useLogin = () => {
         description: "Logged in successfully",
       });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       const id = uuidv4();
       const message =
         error instanceof Error ? error.message : "Failed to login";
@@ -85,11 +85,17 @@ export const useRegister = () => {
 
       return { email, password };
     },
-    onSuccess: async ({ email, password }) => {
+    onSuccess: async ({
+      email,
+      password,
+    }: {
+      email: string;
+      password: string;
+    }) => {
       // After successful registration, log the user in
       await loginMutation.mutateAsync({ email, password });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       const id = uuidv4();
       const message =
         error instanceof Error ? error.message : "Failed to register";
