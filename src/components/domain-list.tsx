@@ -3,13 +3,13 @@
 import { useState, useMemo, ChangeEvent, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { format } from "date-fns";
-import { Trash2, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import Fuse from "fuse.js";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { useDomains, useDeleteDomain } from "@/hooks/use-domains";
-import { useToast } from "@/components/ui/use-toast";
+import { useDomains } from "@/hooks/use-domains";
+import { DeleteDomainDialog } from "./delete-domain-dialog";
 
 interface DomainListProps {
   refreshTrigger?: number;
@@ -19,11 +19,9 @@ const DOMAINS_PER_PAGE = 10;
 
 export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
   const { data: session } = useSession();
-  const { toast } = useToast();
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [deletingDomainId, setDeletingDomainId] = useState<string | null>(null);
 
   // Use TanStack Query to fetch domains
   const {
@@ -32,8 +30,7 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     refetch: fetchDomains,
   } = useDomains(refreshTrigger, currentPage, DOMAINS_PER_PAGE, searchQuery);
 
-  // Use TanStack Query for domain deletion
-  const deleteDomainMutation = useDeleteDomain();
+  // Domain deletion is now handled by the DeleteDomainDialog component
 
   // Extract domains and pagination data from the query result
   const domains = useMemo(
@@ -105,42 +102,19 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     return totalPages;
   }, [isSearching, filteredDomains.length, totalPages]);
 
-  const handleDeleteDomain = async (domainId: string) => {
-    if (window.confirm("Are you sure you want to delete this domain?")) {
-      setDeletingDomainId(domainId);
-      try {
-        await deleteDomainMutation.mutateAsync(domainId);
+  const handleDomainDeleted = () => {
+    const newTotalDomains = totalDomains - 1;
+    const newTotalPages = Math.max(
+      1,
+      Math.ceil(newTotalDomains / DOMAINS_PER_PAGE)
+    );
 
-        const newTotalDomains = totalDomains - 1;
-        const newTotalPages = Math.max(
-          1,
-          Math.ceil(newTotalDomains / DOMAINS_PER_PAGE)
-        );
-
-        // If we deleted the last item on the last page, go to previous page
-        if (currentPage > newTotalPages) {
-          setCurrentPage(newTotalPages);
-        } else {
-          // Otherwise just refresh the current page
-          fetchDomains();
-        }
-
-        toast({
-          title: "Success",
-          description: "Domain deleted successfully",
-          id: "domains-deleted",
-        });
-      } catch (error) {
-        console.error("Error deleting domain:", error);
-        toast({
-          title: "Error",
-          description: "Failed to delete domain",
-          variant: "destructive",
-          id: "domains-delete-error",
-        });
-      } finally {
-        setDeletingDomainId(null);
-      }
+    // If we deleted the last item on the last page, go to previous page
+    if (currentPage > newTotalPages) {
+      setCurrentPage(newTotalPages);
+    } else {
+      // Otherwise just refresh the current page
+      fetchDomains();
     }
   };
 
@@ -302,14 +276,11 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
                       <span className="font-bold">{domain.name}</span>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDeleteDomain(domain.id)}
-                    disabled={deletingDomainId === domain.id}
-                    className="text-gray-500 hover:text-red-500 transition-colors"
-                    aria-label={`Delete ${domain.name}`}
-                  >
-                    <Trash2 size={20} />
-                  </button>
+                  <DeleteDomainDialog
+                    domainId={domain.id}
+                    domainName={domain.name}
+                    onDeleted={handleDomainDeleted}
+                  />
                 </div>
               ))}
             </div>
