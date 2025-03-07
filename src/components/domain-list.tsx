@@ -1,22 +1,15 @@
 "use client";
 
-import { useState, useEffect, useMemo, ChangeEvent, useCallback } from "react";
+import { useState, useMemo, ChangeEvent, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useToast } from "./ui/use-toast";
 import { format } from "date-fns";
 import { Trash2, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import Fuse from "fuse.js";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-
-interface Domain {
-  id: string;
-  name: string;
-  domainExpiryDate: string | null;
-  createdAt: string;
-  updatedAt: string | null;
-}
+import { useDomains, useDeleteDomain } from "@/hooks/use-domains";
+import { useToast } from "@/components/ui/use-toast";
 
 interface DomainListProps {
   refreshTrigger?: number;
@@ -27,14 +20,28 @@ const DOMAINS_PER_PAGE = 10;
 export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
   const { data: session } = useSession();
   const { toast } = useToast();
-  const [domains, setDomains] = useState<Domain[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deletingDomainId, setDeletingDomainId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalDomains, setTotalDomains] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  const [deletingDomainId, setDeletingDomainId] = useState<string | null>(null);
+
+  // Use TanStack Query to fetch domains
+  const {
+    data: domainData,
+    isLoading: loading,
+    refetch: fetchDomains,
+  } = useDomains(refreshTrigger, currentPage, DOMAINS_PER_PAGE, searchQuery);
+
+  // Use TanStack Query for domain deletion
+  const deleteDomainMutation = useDeleteDomain();
+
+  // Extract domains and pagination data from the query result
+  const domains = useMemo(
+    () => domainData?.domains || [],
+    [domainData?.domains]
+  );
+  const totalPages = domainData?.totalPages || 1;
+  const totalDomains = domainData?.total || 0;
 
   // Configure Fuse.js for fuzzy search
   const fuse = useMemo(() => {
@@ -45,15 +52,18 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     });
   }, [domains]);
 
+  // Update isSearching state when searchQuery changes
+  useEffect(() => {
+    setIsSearching(!!searchQuery.trim());
+  }, [searchQuery]);
+
   // Get filtered domains based on search query
   const filteredDomains = useMemo(() => {
     if (!searchQuery.trim()) {
-      setIsSearching(false);
       // If not searching, just return the domains from the paginated API
       return domains;
     }
 
-    setIsSearching(true);
     const results = fuse.search(searchQuery);
     return results.map((result) => result.item);
   }, [domains, searchQuery, fuse]);
@@ -71,101 +81,6 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     return filteredDomains;
   }, [filteredDomains, currentPage, isSearching]);
 
-  // Update total pages when filtered domains change
-  useEffect(() => {
-    // Only update these values when searching, otherwise they come from the API
-    if (isSearching) {
-      setTotalDomains(filteredDomains.length);
-      setTotalPages(
-        Math.max(1, Math.ceil(filteredDomains.length / DOMAINS_PER_PAGE))
-      );
-
-      // Reset to page 1 if current page is now invalid
-      if (currentPage > Math.ceil(filteredDomains.length / DOMAINS_PER_PAGE)) {
-        setCurrentPage(1);
-      }
-    }
-  }, [filteredDomains, currentPage, isSearching]);
-
-  // Function to fetch domains
-  const fetchDomains = useCallback(async () => {
-    if (!session?.user) {
-      setDomains([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // If we're searching, fetch all domains for client-side search
-      // Otherwise, use the paginated API
-      const url = searchQuery.trim()
-        ? `/api/domains?limit=1000` // Get all domains for client-side search
-        : `/api/domains?page=${currentPage}&limit=${DOMAINS_PER_PAGE}`;
-
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error("Failed to fetch domains");
-      }
-
-      const data: {
-        domains: Domain[];
-        total: number;
-        page: number;
-        limit: number;
-        totalPages: number;
-      } = await response.json();
-      console.log("API response:", data);
-      setDomains(data.domains || []);
-
-      // Calculate total pages based on total domains
-      const calculatedTotalPages = Math.ceil(
-        (data.total || 0) / DOMAINS_PER_PAGE
-      );
-      console.log("Calculated total pages:", calculatedTotalPages);
-
-      // Only update pagination if we're not searching
-      if (!searchQuery.trim()) {
-        // Use the calculated total pages if available, otherwise use the server-provided value
-        // Ensure we always have at least 1 page even if there are no domains
-        const finalTotalPages = Math.max(
-          calculatedTotalPages || data.totalPages || 1,
-          1
-        );
-        setTotalPages(finalTotalPages);
-        setTotalDomains(data.total || 0);
-
-        // Ensure current page is valid
-        if (currentPage > finalTotalPages) {
-          setCurrentPage(finalTotalPages);
-        }
-
-        console.log("Pagination data:", {
-          serverTotalPages: data.totalPages,
-          calculatedTotalPages,
-          finalTotalPages,
-          totalDomains: data.total,
-          currentPage,
-        });
-      }
-    } catch (error) {
-      console.error("Error fetching domains:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load domains",
-        variant: "destructive",
-        id: "domains-error",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [currentPage, searchQuery, session?.user, toast]);
-
-  // Fetch domains with pagination and search
-  useEffect(() => {
-    fetchDomains();
-  }, [session, refreshTrigger, toast, currentPage, searchQuery, fetchDomains]);
-
   // Sort domains by expiration date (latest first)
   const sortedDomains = useMemo(() => {
     return [...paginatedDomains].sort((a, b) => {
@@ -182,39 +97,32 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     });
   }, [paginatedDomains]);
 
+  // Recalculate total pages when searching client-side
+  const calculatedTotalPages = useMemo(() => {
+    if (isSearching) {
+      return Math.max(1, Math.ceil(filteredDomains.length / DOMAINS_PER_PAGE));
+    }
+    return totalPages;
+  }, [isSearching, filteredDomains.length, totalPages]);
+
   const handleDeleteDomain = async (domainId: string) => {
     if (window.confirm("Are you sure you want to delete this domain?")) {
       setDeletingDomainId(domainId);
       try {
-        const response = await fetch(`/api/domains/${domainId}`, {
-          method: "DELETE",
-        });
+        await deleteDomainMutation.mutateAsync(domainId);
 
-        if (!response.ok) {
-          throw new Error("Failed to delete domain");
-        }
+        const newTotalDomains = totalDomains - 1;
+        const newTotalPages = Math.max(
+          1,
+          Math.ceil(newTotalDomains / DOMAINS_PER_PAGE)
+        );
 
-        if (isSearching) {
-          // If we're searching, just remove the domain from the local state
-          setDomains((prevDomains) =>
-            prevDomains.filter((domain) => domain.id !== domainId)
-          );
+        // If we deleted the last item on the last page, go to previous page
+        if (currentPage > newTotalPages) {
+          setCurrentPage(newTotalPages);
         } else {
-          // If we're not searching, refetch the current page to get updated data
-          // This ensures pagination remains accurate
-          const newTotalDomains = totalDomains - 1;
-          const newTotalPages = Math.max(
-            1,
-            Math.ceil(newTotalDomains / DOMAINS_PER_PAGE)
-          );
-
-          // If we deleted the last item on the last page, go to previous page
-          if (currentPage > newTotalPages) {
-            setCurrentPage(newTotalPages);
-          } else {
-            // Otherwise just refresh the current page
-            fetchDomains();
-          }
+          // Otherwise just refresh the current page
+          fetchDomains();
         }
 
         toast({
@@ -246,20 +154,12 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
   };
 
   const renderPagination = () => {
-    console.log("Rendering pagination with totalPages:", totalPages);
-
-    // For debugging, always show pagination even if there's only 1 page
-    // We'll remove this condition later once we confirm pagination is working
-    // if (totalPages <= 1) {
-    //   console.log("Not showing pagination because totalPages <= 1");
-    //   return null;
-    // }
-
+    const totalPagesToUse = isSearching ? calculatedTotalPages : totalPages;
     const pageNumbers = [];
     const maxPagesToShow = 5;
 
     let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
-    const endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+    const endPage = Math.min(totalPagesToUse, startPage + maxPagesToShow - 1);
 
     if (endPage - startPage + 1 < maxPagesToShow) {
       startPage = Math.max(1, endPage - maxPagesToShow + 1);
@@ -305,15 +205,15 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
           </Button>
         ))}
 
-        {endPage < totalPages && (
+        {endPage < totalPagesToUse && (
           <>
-            {endPage < totalPages - 1 && <span className="mx-1">...</span>}
+            {endPage < totalPagesToUse - 1 && <span className="mx-1">...</span>}
             <Button
-              variant={currentPage === totalPages ? "default" : "outline"}
+              variant={currentPage === totalPagesToUse ? "default" : "outline"}
               size="sm"
-              onClick={() => handlePageChange(totalPages)}
+              onClick={() => handlePageChange(totalPagesToUse)}
             >
-              {totalPages}
+              {totalPagesToUse}
             </Button>
           </>
         )}
@@ -322,9 +222,9 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
           variant="outline"
           size="sm"
           onClick={() =>
-            handlePageChange(Math.min(totalPages, currentPage + 1))
+            handlePageChange(Math.min(totalPagesToUse, currentPage + 1))
           }
-          disabled={currentPage === totalPages}
+          disabled={currentPage === totalPagesToUse}
           aria-label="Next page"
         >
           <ChevronRight className="h-4 w-4" />
@@ -365,7 +265,7 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
           <>
             <div className="text-sm text-muted-foreground mb-2">
               Showing {Math.min(DOMAINS_PER_PAGE, sortedDomains.length)} of{" "}
-              {totalDomains} domains
+              {isSearching ? filteredDomains.length : totalDomains} domains
               {searchQuery && ` (filtered from ${domains.length} total)`}
             </div>
 
@@ -416,12 +316,15 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
 
             {/* Debug pagination info */}
             <div className="text-xs text-muted-foreground mt-4">
-              Debug: {totalDomains} total domains, {totalPages} pages, currently
+              Debug: {isSearching ? filteredDomains.length : totalDomains} total
+              domains,
+              {isSearching ? calculatedTotalPages : totalPages} pages, currently
               on page {currentPage}
             </div>
 
-            {/* Always render pagination */}
-            {totalDomains > 10 && renderPagination()}
+            {/* Render pagination if needed */}
+            {(isSearching ? filteredDomains.length : totalDomains) >
+              DOMAINS_PER_PAGE && renderPagination()}
           </>
         )}
       </CardContent>
