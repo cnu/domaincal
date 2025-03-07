@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { AuthService } from "@/services/auth.service";
-import { toast } from "@/components/ui/use-toast";
 
 export class AuthController {
   /**
@@ -42,12 +41,8 @@ export class AuthController {
       await AuthService.processPendingDomains(userId, pendingDomains);
     } catch (error) {
       console.error("Error processing pending domains:", error);
-      toast({
-        id: "failed-pending-domains",
-        title: "Error",
-        description: "Failed to process pending domains",
-        variant: "destructive",
-      });
+      // Log the error but don't use toast in server-side code
+      // The UI layer should handle displaying errors to the user
     }
   }
 }
