@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AuthService } from "@/services/auth.service";
+import { toast } from "@/components/ui/use-toast";
 
 export class AuthController {
   /**
@@ -21,11 +22,11 @@ export class AuthController {
       return NextResponse.json({ user });
     } catch (error) {
       console.error("Registration error:", error);
-      const errorMessage = error instanceof Error ? error.message : "An error occurred during registration";
-      return NextResponse.json(
-        { error: errorMessage },
-        { status: 500 }
-      );
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "An error occurred during registration";
+      return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
   }
 
@@ -41,7 +42,12 @@ export class AuthController {
       await AuthService.processPendingDomains(userId, pendingDomains);
     } catch (error) {
       console.error("Error processing pending domains:", error);
-      throw new Error("Failed to process pending domains");
+      toast({
+        id: "failed-pending-domains",
+        title: "Error",
+        description: "Failed to process pending domains",
+        variant: "destructive",
+      });
     }
   }
 }

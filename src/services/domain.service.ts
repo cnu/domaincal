@@ -1,3 +1,4 @@
+import { toast } from "@/components/ui/use-toast";
 import { prisma } from "@/lib/prisma";
 import {
   DomainResponse,
@@ -35,7 +36,21 @@ export class DomainService {
     // Sanitize and validate domain
     const sanitizedDomain = sanitizeDomain(domainName);
     if (!sanitizedDomain || !validateDomain(sanitizedDomain)) {
-      throw new Error("Invalid domain format");
+      toast({
+        id: "invalid-domains",
+        title: "Error",
+        description: "Invalid domain format",
+        variant: "destructive",
+      });
+      
+      // Return a default DomainResponse object with error indication
+      return {
+        id: "",
+        name: domainName,
+        domainExpiryDate: null,
+        createdAt: new Date(),
+        updatedAt: null,
+      };
     }
 
     // Check if domain already exists
@@ -109,11 +124,12 @@ export class DomainService {
     invalid: string[];
     duplicates: string[];
   }> {
-    const { validDomains, invalidDomains, duplicates } = processDomainList(domainNames);
-    
+    const { validDomains, invalidDomains, duplicates } =
+      processDomainList(domainNames);
+
     const added: DomainResponse[] = [];
     const dbDuplicates: string[] = [];
-    
+
     // Process each valid domain
     for (const domain of validDomains) {
       try {
@@ -131,7 +147,7 @@ export class DomainService {
           domainId = newDomain.id;
         } else {
           domainId = existingDomain.id;
-          
+
           // Check if user already has this domain
           const existingUserDomain = await prisma.userDomains.findUnique({
             where: {
@@ -141,7 +157,7 @@ export class DomainService {
               },
             },
           });
-          
+
           if (existingUserDomain) {
             dbDuplicates.push(domain);
             continue;
@@ -169,7 +185,7 @@ export class DomainService {
         invalidDomains.push(domain);
       }
     }
-    
+
     return {
       added,
       invalid: invalidDomains,
