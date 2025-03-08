@@ -3,9 +3,7 @@ import { getServerSession } from "next-auth";
 import prisma from "@/lib/prisma";
 import { authOptions } from "@/lib/auth";
 import { DomainService } from "@/services/domain.service";
-
-// DomainController will be used in future refactoring
-
+import { DomainController } from "@/controllers/domain.controller";
 import { serializeDomain, processDomainList } from "@/models/domain.model";
 
 interface ErrorResponse {
@@ -13,6 +11,11 @@ interface ErrorResponse {
 }
 
 export async function GET(request: NextRequest) {
+  // For simple domain retrieval without pagination, use the controller
+  if (!request.url.includes('page') && !request.url.includes('limit')) {
+    return DomainController.getUserDomains();
+  }
+  
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.id) {
@@ -61,19 +64,8 @@ export async function GET(request: NextRequest) {
     take: validLimit,
   });
 
-  // Calculate total pages - ensure at least 2 pages for testing pagination
-  const calculatedTotalPages = Math.ceil(totalDomains / validLimit);
-  const totalPages = Math.max(calculatedTotalPages, 2); // Force at least 2 pages for testing
-
-  console.log("API pagination data:", {
-    totalDomains,
-    calculatedTotalPages,
-    forcedTotalPages: totalPages,
-    page: validPage,
-    limit: validLimit,
-    skip,
-    domainsReturned: domains.length,
-  });
+  // Calculate total pages
+  const totalPages = Math.ceil(totalDomains / validLimit);
 
   return NextResponse.json({
     domains: domains.map(serializeDomain),

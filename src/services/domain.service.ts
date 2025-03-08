@@ -89,19 +89,7 @@ export class DomainService {
     return serializeDomain(domain);
   }
 
-  /**
-   * Validate a domain without adding it
-   */
-  static validateDomainOnly(domainName: string): boolean {
-    return validateDomain(domainName.trim());
-  }
-
-  /**
-   * Sanitize a domain without adding it
-   */
-  static sanitizeDomainOnly(domainName: string): string | null {
-    return sanitizeDomain(domainName);
-  }
+  // These methods were removed as they're duplicative of the functions in domain.model.ts
 
   /**
    * Process multiple domains for a user

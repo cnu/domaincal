@@ -123,7 +123,6 @@ export function useAddDomains() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ domains }),
       });
-
       const data = await response.json();
 
       if (!response.ok) {
