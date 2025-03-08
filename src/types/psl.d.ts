@@ -1,4 +1,4 @@
-declare module 'psl' {
+declare module "psl" {
   interface ParsedDomain {
     tld: string | null;
     sld?: string | null;
@@ -22,9 +22,12 @@ declare module 'psl' {
    */
   export function get(domain: string): string | null;
 
-  export default {
+  // Create a named object for the default export
+  const psl = {
     parse,
     isValid,
-    get
+    get,
   };
+
+  export default psl;
 }
