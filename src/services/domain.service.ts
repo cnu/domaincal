@@ -6,6 +6,7 @@ import {
   sanitizeDomain,
   processDomainList,
 } from "@/models/domain.model";
+import { DomainLookupService } from "@/services/domain-lookup.service";
 
 export class DomainService {
   /**
@@ -41,6 +42,10 @@ export class DomainService {
         id: "",
         name: domainName,
         domainExpiryDate: null,
+        domainCreatedDate: null,
+        registrar: null,
+        emails: null,
+        response: null,
         createdAt: new Date(),
         updatedAt: null,
       };
@@ -51,13 +56,154 @@ export class DomainService {
       where: { name: sanitizedDomain },
     });
 
+    // Check if user already has this domain
+    const existingUserDomain = existingDomain
+      ? await prisma.userDomains.findUnique({
+          where: {
+            userId_domainId: {
+              userId: BigInt(userId),
+              domainId: existingDomain.id,
+            },
+          },
+        })
+      : null;
+
+    // If user already has this domain, return it as a duplicate
+    if (existingUserDomain && existingDomain) {
+      return {
+        id: existingDomain.id.toString(),
+        name: existingDomain.name,
+        domainExpiryDate: existingDomain.domainExpiryDate,
+        domainCreatedDate: existingDomain.domainCreatedDate,
+        registrar: existingDomain.registrar,
+        emails: existingDomain.emails,
+        response: existingDomain.response,
+        createdAt: existingDomain.createdAt,
+        updatedAt: existingDomain.updatedAt,
+      };
+    }
+
     let domainId: bigint;
+
     if (!existingDomain) {
-      // Create new domain
-      const newDomain = await prisma.domain.create({
-        data: { name: sanitizedDomain },
-      });
-      domainId = newDomain.id;
+      try {
+        // Check domain registration status with WHOIS API
+        const checkResult = await DomainLookupService.checkDomainRegistration(
+          sanitizedDomain
+        );
+
+        if (checkResult.result === "registered") {
+          // Get detailed WHOIS information
+          const whoisInfo = await DomainLookupService.getDetailedWhoisInfo(
+            sanitizedDomain
+          );
+
+          // Parse dates from WHOIS response - handle different field names with better parsing
+          // The WHOIS API returns data in a nested structure that's already handled by domain-lookup.service.ts
+          let expiryDate = null;
+          try {
+            if (whoisInfo.expiration_date) {
+              expiryDate = new Date(whoisInfo.expiration_date);
+              console.log(`Parsed expiration_date: ${whoisInfo.expiration_date} -> ${expiryDate}`);
+            } else if (whoisInfo.expire_date) {
+              expiryDate = new Date(whoisInfo.expire_date);
+              console.log(`Parsed expire_date: ${whoisInfo.expire_date} -> ${expiryDate}`);
+            }
+            
+            // Check if the date is valid
+            if (expiryDate && isNaN(expiryDate.getTime())) {
+              console.log(`Invalid expiry date detected, setting to null`);
+              expiryDate = null;
+            }
+          } catch (error) {
+            console.error(`Error parsing expiry date:`, error);
+            expiryDate = null;
+          }
+              
+          let createdDate = null;
+          try {
+            if (whoisInfo.creation_date) {
+              createdDate = new Date(whoisInfo.creation_date);
+              console.log(`Parsed creation_date: ${whoisInfo.creation_date} -> ${createdDate}`);
+            } else if (whoisInfo.create_date) {
+              createdDate = new Date(whoisInfo.create_date);
+              console.log(`Parsed create_date: ${whoisInfo.create_date} -> ${createdDate}`);
+            }
+            
+            // Check if the date is valid
+            if (createdDate && isNaN(createdDate.getTime())) {
+              console.log(`Invalid creation date detected, setting to null`);
+              createdDate = null;
+            }
+          } catch (error) {
+            console.error(`Error parsing creation date:`, error);
+            createdDate = null;
+          }
+          
+          // Log the full domain data for debugging
+          console.log(`Domain data for ${sanitizedDomain}:`, {
+            expiryDate,
+            createdDate,
+            whoisInfo: JSON.stringify(whoisInfo).substring(0, 200) + '...'
+          });
+
+          // Extract registrar and contact information
+          const registrarValue = whoisInfo.registrar || null;
+          // Convert registrar to string format if it's an object
+          const registrar =
+            typeof registrarValue === "string"
+              ? registrarValue
+              : registrarValue &&
+                typeof registrarValue === "object" &&
+                registrarValue.name
+              ? registrarValue.name
+              : null;
+
+          const emails =
+            (whoisInfo.registrant &&
+              "email" in whoisInfo.registrant &&
+              whoisInfo.registrant.email) ||
+            (whoisInfo.registrar &&
+              typeof whoisInfo.registrar !== "string" &&
+              whoisInfo.registrar.email) ||
+            whoisInfo.emails ||
+            null;
+
+          // Create new domain with WHOIS data
+          const newDomain = await prisma.domain.create({
+            data: {
+              name: sanitizedDomain,
+              domainExpiryDate: expiryDate,
+              domainCreatedDate: createdDate,
+              domainUpdatedDate: new Date(),
+              registrar,
+              emails,
+              response: JSON.parse(JSON.stringify(whoisInfo)),
+            },
+          });
+          domainId = newDomain.id;
+        } else {
+          // Create new domain with just the status information
+          const newDomain = await prisma.domain.create({
+            data: {
+              name: sanitizedDomain,
+              domainUpdatedDate: new Date(),
+              response: { status: checkResult.result },
+            },
+          });
+          domainId = newDomain.id;
+        }
+      } catch (error) {
+        console.error(
+          `Error fetching WHOIS data for ${sanitizedDomain}:`,
+          error
+        );
+        // Create domain without WHOIS data if API call fails
+        const newDomain = await prisma.domain.create({
+          data: { name: sanitizedDomain },
+        });
+        domainId = newDomain.id;
+      }
     } else {
       domainId = existingDomain.id;
     }
@@ -119,13 +265,141 @@ export class DomainService {
           where: { name: domain },
         });
 
+        // Check if user already has this domain
+        const existingUserDomain = existingDomain
+          ? await prisma.userDomains.findUnique({
+              where: {
+                userId_domainId: {
+                  userId: BigInt(userId),
+                  domainId: existingDomain.id,
+                },
+              },
+            })
+          : null;
+
+        // If user already has this domain, add it to duplicates
+        if (existingUserDomain && existingDomain) {
+          dbDuplicates.push(domain);
+          continue;
+        }
+
         let domainId: bigint;
+
         if (!existingDomain) {
-          // Create new domain
-          const newDomain = await prisma.domain.create({
-            data: { name: domain },
-          });
-          domainId = newDomain.id;
+          try {
+            // Check domain registration status with WHOIS API
+            const checkResult =
+              await DomainLookupService.checkDomainRegistration(domain);
+
+            if (checkResult.result === "registered") {
+              // Get detailed WHOIS information
+              const whoisInfo = await DomainLookupService.getDetailedWhoisInfo(
+                domain
+              );
+
+              // Parse dates from WHOIS response - handle different field names with better parsing
+              let expiryDate = null;
+              try {
+                if (whoisInfo.expiration_date) {
+                  expiryDate = new Date(whoisInfo.expiration_date);
+                  console.log(`Bulk: Parsed expiration_date: ${whoisInfo.expiration_date} -> ${expiryDate}`);
+                } else if (whoisInfo.expire_date) {
+                  expiryDate = new Date(whoisInfo.expire_date);
+                  console.log(`Bulk: Parsed expire_date: ${whoisInfo.expire_date} -> ${expiryDate}`);
+                }
+                
+                // Check if the date is valid
+                if (expiryDate && isNaN(expiryDate.getTime())) {
+                  console.log(`Bulk: Invalid expiry date detected, setting to null`);
+                  expiryDate = null;
+                }
+              } catch (error) {
+                console.error(`Bulk: Error parsing expiry date:`, error);
+                expiryDate = null;
+              }
+                  
+              let createdDate = null;
+              try {
+                if (whoisInfo.creation_date) {
+                  createdDate = new Date(whoisInfo.creation_date);
+                  console.log(`Bulk: Parsed creation_date: ${whoisInfo.creation_date} -> ${createdDate}`);
+                } else if (whoisInfo.create_date) {
+                  createdDate = new Date(whoisInfo.create_date);
+                  console.log(`Bulk: Parsed create_date: ${whoisInfo.create_date} -> ${createdDate}`);
+                }
+                
+                // Check if the date is valid
+                if (createdDate && isNaN(createdDate.getTime())) {
+                  console.log(`Bulk: Invalid creation date detected, setting to null`);
+                  createdDate = null;
+                }
+              } catch (error) {
+                console.error(`Bulk: Error parsing creation date:`, error);
+                createdDate = null;
+              }
+              
+              // Log the full domain data for debugging
+              console.log(`Bulk: Domain data for ${domain}:`, {
+                expiryDate,
+                createdDate,
+                whoisInfo: JSON.stringify(whoisInfo).substring(0, 200) + '...'
+              });
+
+              // Extract registrar information - handle different formats
+              const registrarValue = whoisInfo.registrar || null;
+              // Convert registrar to string format if it's an object
+              const registrar =
+                typeof registrarValue === "string"
+                  ? registrarValue
+                  : registrarValue &&
+                    typeof registrarValue === "object" &&
+                    registrarValue.name
+                  ? registrarValue.name
+                  : null;
+
+              // Extract email information - handle different formats
+              const emails =
+                (whoisInfo.registrant &&
+                  "email" in whoisInfo.registrant &&
+                  whoisInfo.registrant.email) ||
+                (whoisInfo.registrar &&
+                  typeof whoisInfo.registrar !== "string" &&
+                  whoisInfo.registrar.email) ||
+                whoisInfo.emails ||
+                null;
+
+              // Create new domain with WHOIS data
+              const newDomain = await prisma.domain.create({
+                data: {
+                  name: domain,
+                  domainExpiryDate: expiryDate,
+                  domainCreatedDate: createdDate,
+                  domainUpdatedDate: new Date(),
+                  registrar,
+                  emails,
+                  response: JSON.parse(JSON.stringify(whoisInfo)),
+                },
+              });
+              domainId = newDomain.id;
+            } else {
+              // Create new domain with just the status information
+              const newDomain = await prisma.domain.create({
+                data: {
+                  name: domain,
+                  domainUpdatedDate: new Date(),
+                  response: { status: checkResult.result },
+                },
+              });
+              domainId = newDomain.id;
+            }
+          } catch (error) {
+            console.error(`Error fetching WHOIS data for ${domain}:`, error);
+            // Create domain without WHOIS data if API call fails
+            const newDomain = await prisma.domain.create({
+              data: { name: domain },
+            });
+            domainId = newDomain.id;
+          }
         } else {
           domainId = existingDomain.id;
 
