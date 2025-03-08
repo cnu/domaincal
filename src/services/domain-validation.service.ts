@@ -156,19 +156,17 @@ export class DomainValidationService {
       // Domain label validation (RFC 1035)
       const labels = trimmedDomain.split(".");
       for (const label of labels) {
-        if (label.length > 63) {
-          return false;
-        }
-
-        // Check for valid characters in domain labels
-        if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i.test(label)) {
+        if (
+          label.length > 63 ||
+          !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i.test(label)
+        ) {
           return false;
         }
       }
 
       return true;
-    } catch (error) {
-      console.log(error);
+    } catch {
+      // Silently fail with validation errors
       return false;
     }
   }
