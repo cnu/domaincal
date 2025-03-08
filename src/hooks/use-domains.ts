@@ -118,6 +118,9 @@ export function useAddDomains() {
 
   return useMutation<DomainSubmitResponse, Error, string[]>({
     mutationFn: async (domains: string[]) => {
+      const myHeaders = new Headers();
+      myHeaders.append("apikey", process.env.WHOIS_API_KEY || "");
+
       const response = await fetch("/api/domains", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -246,6 +249,51 @@ export function useDeleteDomain() {
         id,
         title: "Error",
         description: error.message || "Failed to delete domain",
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+// Refresh domain WHOIS information
+export function useRefreshDomainWhois() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (domainId: string) => {
+      const response = await fetch(`/api/domains/${domainId}/lookup`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to refresh domain information");
+      }
+
+      const result = await response.json();
+      return result;
+    },
+    onSuccess: (data) => {
+      // Show success toast
+      const id = uuidv4();
+      toast({
+        id,
+        title: "WHOIS Updated",
+        description: `Domain information for ${
+          data.domain?.name || "domain"
+        } refreshed successfully`,
+      });
+
+      // Invalidate domains query to refresh the list
+      queryClient.invalidateQueries({ queryKey: ["domains"] });
+    },
+    onError: (error: Error) => {
+      const id = uuidv4();
+      toast({
+        id,
+        title: "Error",
+        description: error.message || "Failed to refresh domain information",
         variant: "destructive",
       });
     },

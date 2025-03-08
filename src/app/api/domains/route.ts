@@ -12,10 +12,10 @@ interface ErrorResponse {
 
 export async function GET(request: NextRequest) {
   // For simple domain retrieval without pagination, use the controller
-  if (!request.url.includes('page') && !request.url.includes('limit')) {
+  if (!request.url.includes("page") && !request.url.includes("limit")) {
     return DomainController.getUserDomains();
   }
-  
+
   const session = await getServerSession(authOptions);
 
   if (!session?.user?.id) {
@@ -88,12 +88,6 @@ export async function POST(request: NextRequest) {
     } else if (domain) {
       domainList = [domain];
     }
-
-    // Log the received domains for debugging
-    console.log(
-      `Received ${domainList.length} domains in request:`,
-      domainList
-    );
 
     if (domainList.length === 0) {
       return NextResponse.json(

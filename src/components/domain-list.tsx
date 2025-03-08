@@ -247,7 +247,7 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
               {sortedDomains.map((domain) => (
                 <div
                   key={domain.id}
-                  className="border rounded-lg p-4 flex items-center justify-between"
+                  className="border rounded-lg p-4 flex items-center justify-between transition-all duration-200 hover:shadow-md hover:border-gray-400 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50"
                 >
                   <div className="flex items-center space-x-4">
                     <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
@@ -257,7 +257,7 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
                             <div className="text-sm">
                               {format(
                                 new Date(domain.domainExpiryDate),
-                                "dd MMMM"
+                                "dd MMM"
                               )}
                             </div>
                             <div className="font-bold">

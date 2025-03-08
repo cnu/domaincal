@@ -19,6 +19,10 @@ export interface DomainResponse {
   id: string;
   name: string;
   domainExpiryDate: Date | null;
+  domainCreatedDate: Date | null;
+  registrar: string | null;
+  emails: string | null;
+  response: JsonValue | null;
   createdAt: Date;
   updatedAt: Date | null;
 }
@@ -27,6 +31,10 @@ export const serializeDomain = (domain: PrismaDomain): DomainResponse => ({
   id: domain.id.toString(),
   name: domain.name,
   domainExpiryDate: domain.domainExpiryDate,
+  domainCreatedDate: domain.domainCreatedDate,
+  registrar: domain.registrar,
+  emails: domain.emails,
+  response: domain.response,
   createdAt: domain.createdAt,
   updatedAt: domain.updatedAt,
 });
