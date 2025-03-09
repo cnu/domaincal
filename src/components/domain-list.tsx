@@ -78,7 +78,7 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     return filteredDomains;
   }, [filteredDomains, currentPage, isSearching]);
 
-  // Sort domains by expiration date (latest first)
+  // Sort domains by expiration date (closest expiry dates first)
   const sortedDomains = useMemo(() => {
     return [...paginatedDomains].sort((a, b) => {
       // Handle null expiry dates (put them at the end)
@@ -86,10 +86,10 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
       if (!a.domainExpiryDate) return 1;
       if (!b.domainExpiryDate) return -1;
 
-      // Sort by date (latest first)
+      // Sort by date (closest expiry dates first)
       return (
-        new Date(b.domainExpiryDate).getTime() -
-        new Date(a.domainExpiryDate).getTime()
+        new Date(a.domainExpiryDate).getTime() -
+        new Date(b.domainExpiryDate).getTime()
       );
     });
   }, [paginatedDomains]);
