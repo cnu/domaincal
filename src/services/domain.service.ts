@@ -107,6 +107,7 @@ export class DomainService {
       // Then, fetch WHOIS data in the background
       // This won't block the domain addition process
       this.fetchWhoisDataInBackground(domainId, sanitizedDomain);
+
     } else {
       domainId = existingDomain.id;
     }
