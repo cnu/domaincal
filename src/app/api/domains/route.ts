@@ -55,8 +55,8 @@ export async function GET(request: NextRequest) {
       },
     },
     orderBy: [
-      // Sort by expiry date (nulls last)
-      { domainExpiryDate: "desc" },
+      // Sort by expiry date ascending (closest expiry dates first, nulls last)
+      { domainExpiryDate: "asc" },
       // Secondary sort by name for domains with no expiry date
       { name: "asc" },
     ],

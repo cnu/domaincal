@@ -21,6 +21,12 @@ export class DomainService {
           },
         },
       },
+      orderBy: [
+        // Sort by expiry date ascending (closest expiry dates first, nulls last)
+        { domainExpiryDate: "asc" },
+        // Secondary sort by name for domains with no expiry date
+        { name: "asc" },
+      ],
     });
 
     return domains.map(serializeDomain);
@@ -86,124 +92,21 @@ export class DomainService {
     let domainId: bigint;
 
     if (!existingDomain) {
-      try {
-        // Check domain registration status with WHOIS API
-        const checkResult = await DomainLookupService.checkDomainRegistration(
-          sanitizedDomain
-        );
+      // First, create the domain with minimal information
+      // This ensures the domain is added quickly without waiting for API calls
+      // domainExpiryDate is explicitly set to null to show '...' in the UI
+      const newDomain = await prisma.domain.create({
+        data: {
+          name: sanitizedDomain,
+          domainExpiryDate: null,
+          domainUpdatedDate: new Date(),
+        },
+      });
+      domainId = newDomain.id;
 
-        if (checkResult.result === "registered") {
-          // Get detailed WHOIS information
-          const whoisInfo = await DomainLookupService.getDetailedWhoisInfo(
-            sanitizedDomain
-          );
-
-          // Parse dates from WHOIS response - handle different field names with better parsing
-          // The WHOIS API returns data in a nested structure that's already handled by domain-lookup.service.ts
-          let expiryDate = null;
-          try {
-            if (whoisInfo.expiration_date) {
-              expiryDate = new Date(whoisInfo.expiration_date);
-              console.log(`Parsed expiration_date: ${whoisInfo.expiration_date} -> ${expiryDate}`);
-            } else if (whoisInfo.expire_date) {
-              expiryDate = new Date(whoisInfo.expire_date);
-              console.log(`Parsed expire_date: ${whoisInfo.expire_date} -> ${expiryDate}`);
-            }
-            
-            // Check if the date is valid
-            if (expiryDate && isNaN(expiryDate.getTime())) {
-              console.log(`Invalid expiry date detected, setting to null`);
-              expiryDate = null;
-            }
-          } catch (error) {
-            console.error(`Error parsing expiry date:`, error);
-            expiryDate = null;
-          }
-              
-          let createdDate = null;
-          try {
-            if (whoisInfo.creation_date) {
-              createdDate = new Date(whoisInfo.creation_date);
-              console.log(`Parsed creation_date: ${whoisInfo.creation_date} -> ${createdDate}`);
-            } else if (whoisInfo.create_date) {
-              createdDate = new Date(whoisInfo.create_date);
-              console.log(`Parsed create_date: ${whoisInfo.create_date} -> ${createdDate}`);
-            }
-            
-            // Check if the date is valid
-            if (createdDate && isNaN(createdDate.getTime())) {
-              console.log(`Invalid creation date detected, setting to null`);
-              createdDate = null;
-            }
-          } catch (error) {
-            console.error(`Error parsing creation date:`, error);
-            createdDate = null;
-          }
-          
-          // Log the full domain data for debugging
-          console.log(`Domain data for ${sanitizedDomain}:`, {
-            expiryDate,
-            createdDate,
-            whoisInfo: JSON.stringify(whoisInfo).substring(0, 200) + '...'
-          });
-
-          // Extract registrar and contact information
-          const registrarValue = whoisInfo.registrar || null;
-          // Convert registrar to string format if it's an object
-          const registrar =
-            typeof registrarValue === "string"
-              ? registrarValue
-              : registrarValue &&
-                typeof registrarValue === "object" &&
-                registrarValue.name
-              ? registrarValue.name
-              : null;
-
-          const emails =
-            (whoisInfo.registrant &&
-              "email" in whoisInfo.registrant &&
-              whoisInfo.registrant.email) ||
-            (whoisInfo.registrar &&
-              typeof whoisInfo.registrar !== "string" &&
-              whoisInfo.registrar.email) ||
-            whoisInfo.emails ||
-            null;
-
-          // Create new domain with WHOIS data
-          const newDomain = await prisma.domain.create({
-            data: {
-              name: sanitizedDomain,
-              domainExpiryDate: expiryDate,
-              domainCreatedDate: createdDate,
-              domainUpdatedDate: new Date(),
-              registrar,
-              emails,
-              response: JSON.parse(JSON.stringify(whoisInfo)),
-            },
-          });
-          domainId = newDomain.id;
-        } else {
-          // Create new domain with just the status information
-          const newDomain = await prisma.domain.create({
-            data: {
-              name: sanitizedDomain,
-              domainUpdatedDate: new Date(),
-              response: { status: checkResult.result },
-            },
-          });
-          domainId = newDomain.id;
-        }
-      } catch (error) {
-        console.error(
-          `Error fetching WHOIS data for ${sanitizedDomain}:`,
-          error
-        );
-        // Create domain without WHOIS data if API call fails
-        const newDomain = await prisma.domain.create({
-          data: { name: sanitizedDomain },
-        });
-        domainId = newDomain.id;
-      }
+      // Then, fetch WHOIS data in the background
+      // This won't block the domain addition process
+      this.fetchWhoisDataInBackground(domainId, sanitizedDomain);
     } else {
       domainId = existingDomain.id;
     }
@@ -236,6 +139,124 @@ export class DomainService {
   }
 
   // These methods were removed as they're duplicative of the functions in domain.model.ts
+
+  /**
+   * Fetch WHOIS data for a domain in the background and update the database
+   * This method is called after a domain is added to the database
+   * @param domainId The ID of the domain in the database
+   * @param domainName The domain name to fetch WHOIS data for
+   */
+  static async fetchWhoisDataInBackground(
+    domainId: bigint,
+    domainName: string
+  ): Promise<void> {
+    try {
+      console.log(`Fetching WHOIS data in background for ${domainName}`);
+
+      // Add a small delay to ensure the UI has time to render the new domain
+      // This makes the user experience smoother
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Check domain registration status with WHOIS API
+      const checkResult = await DomainLookupService.checkDomainRegistration(
+        domainName
+      );
+
+      if (checkResult.result === "registered") {
+        // Get detailed WHOIS information
+        const whoisInfo = await DomainLookupService.getDetailedWhoisInfo(
+          domainName
+        );
+
+        // Parse dates from WHOIS response - handle different field names with better parsing
+        let expiryDate = null;
+        try {
+          if (whoisInfo.expiration_date) {
+            expiryDate = new Date(whoisInfo.expiration_date);
+          } else if (whoisInfo.expire_date) {
+            expiryDate = new Date(whoisInfo.expire_date);
+          }
+
+          // Check if the date is valid
+          if (expiryDate && isNaN(expiryDate.getTime())) {
+            expiryDate = null;
+          }
+        } catch (error) {
+          console.error(`Error parsing expiry date:`, error);
+          expiryDate = null;
+        }
+
+        let createdDate = null;
+        try {
+          if (whoisInfo.creation_date) {
+            createdDate = new Date(whoisInfo.creation_date);
+          } else if (whoisInfo.create_date) {
+            createdDate = new Date(whoisInfo.create_date);
+          }
+
+          // Check if the date is valid
+          if (createdDate && isNaN(createdDate.getTime())) {
+            createdDate = null;
+          }
+        } catch (error) {
+          console.error(`Error parsing creation date:`, error);
+          createdDate = null;
+        }
+
+        // Extract registrar and contact information
+        const registrarValue = whoisInfo.registrar || null;
+        // Convert registrar to string format if it's an object
+        const registrar =
+          typeof registrarValue === "string"
+            ? registrarValue
+            : registrarValue &&
+              typeof registrarValue === "object" &&
+              registrarValue.name
+            ? registrarValue.name
+            : null;
+
+        const emails =
+          (whoisInfo.registrant &&
+            "email" in whoisInfo.registrant &&
+            whoisInfo.registrant.email) ||
+          (whoisInfo.registrar &&
+            typeof whoisInfo.registrar !== "string" &&
+            whoisInfo.registrar.email) ||
+          whoisInfo.emails ||
+          null;
+
+        // Update the domain with WHOIS data
+        await prisma.domain.update({
+          where: { id: domainId },
+          data: {
+            domainExpiryDate: expiryDate,
+            domainCreatedDate: createdDate,
+            domainUpdatedDate: new Date(),
+            registrar,
+            emails,
+            response: JSON.parse(JSON.stringify(whoisInfo)),
+          },
+        });
+
+        console.log(`Successfully updated WHOIS data for ${domainName}`);
+      } else {
+        // Update domain with just the status information
+        await prisma.domain.update({
+          where: { id: domainId },
+          data: {
+            domainUpdatedDate: new Date(),
+            response: { status: checkResult.result },
+          },
+        });
+
+        console.log(`Domain ${domainName} is not registered`);
+      }
+    } catch (error) {
+      console.error(`Error fetching WHOIS data for ${domainName}:`, error);
+      // We don't throw the error here since this is a background process
+      // and we don't want to affect the user experience
+    }
+  }
 
   /**
    * Process multiple domains for a user
@@ -286,120 +307,20 @@ export class DomainService {
         let domainId: bigint;
 
         if (!existingDomain) {
-          try {
-            // Check domain registration status with WHOIS API
-            const checkResult =
-              await DomainLookupService.checkDomainRegistration(domain);
+          // First, create the domain with minimal information
+          // This ensures the domain is added quickly without waiting for API calls
+          const newDomain = await prisma.domain.create({
+            data: {
+              name: domain,
+              domainExpiryDate: null, // Explicitly set to null to show '...' in the UI
+              domainUpdatedDate: new Date(),
+            },
+          });
+          domainId = newDomain.id;
 
-            if (checkResult.result === "registered") {
-              // Get detailed WHOIS information
-              const whoisInfo = await DomainLookupService.getDetailedWhoisInfo(
-                domain
-              );
-
-              // Parse dates from WHOIS response - handle different field names with better parsing
-              let expiryDate = null;
-              try {
-                if (whoisInfo.expiration_date) {
-                  expiryDate = new Date(whoisInfo.expiration_date);
-                  console.log(`Bulk: Parsed expiration_date: ${whoisInfo.expiration_date} -> ${expiryDate}`);
-                } else if (whoisInfo.expire_date) {
-                  expiryDate = new Date(whoisInfo.expire_date);
-                  console.log(`Bulk: Parsed expire_date: ${whoisInfo.expire_date} -> ${expiryDate}`);
-                }
-                
-                // Check if the date is valid
-                if (expiryDate && isNaN(expiryDate.getTime())) {
-                  console.log(`Bulk: Invalid expiry date detected, setting to null`);
-                  expiryDate = null;
-                }
-              } catch (error) {
-                console.error(`Bulk: Error parsing expiry date:`, error);
-                expiryDate = null;
-              }
-                  
-              let createdDate = null;
-              try {
-                if (whoisInfo.creation_date) {
-                  createdDate = new Date(whoisInfo.creation_date);
-                  console.log(`Bulk: Parsed creation_date: ${whoisInfo.creation_date} -> ${createdDate}`);
-                } else if (whoisInfo.create_date) {
-                  createdDate = new Date(whoisInfo.create_date);
-                  console.log(`Bulk: Parsed create_date: ${whoisInfo.create_date} -> ${createdDate}`);
-                }
-                
-                // Check if the date is valid
-                if (createdDate && isNaN(createdDate.getTime())) {
-                  console.log(`Bulk: Invalid creation date detected, setting to null`);
-                  createdDate = null;
-                }
-              } catch (error) {
-                console.error(`Bulk: Error parsing creation date:`, error);
-                createdDate = null;
-              }
-              
-              // Log the full domain data for debugging
-              console.log(`Bulk: Domain data for ${domain}:`, {
-                expiryDate,
-                createdDate,
-                whoisInfo: JSON.stringify(whoisInfo).substring(0, 200) + '...'
-              });
-
-              // Extract registrar information - handle different formats
-              const registrarValue = whoisInfo.registrar || null;
-              // Convert registrar to string format if it's an object
-              const registrar =
-                typeof registrarValue === "string"
-                  ? registrarValue
-                  : registrarValue &&
-                    typeof registrarValue === "object" &&
-                    registrarValue.name
-                  ? registrarValue.name
-                  : null;
-
-              // Extract email information - handle different formats
-              const emails =
-                (whoisInfo.registrant &&
-                  "email" in whoisInfo.registrant &&
-                  whoisInfo.registrant.email) ||
-                (whoisInfo.registrar &&
-                  typeof whoisInfo.registrar !== "string" &&
-                  whoisInfo.registrar.email) ||
-                whoisInfo.emails ||
-                null;
-
-              // Create new domain with WHOIS data
-              const newDomain = await prisma.domain.create({
-                data: {
-                  name: domain,
-                  domainExpiryDate: expiryDate,
-                  domainCreatedDate: createdDate,
-                  domainUpdatedDate: new Date(),
-                  registrar,
-                  emails,
-                  response: JSON.parse(JSON.stringify(whoisInfo)),
-                },
-              });
-              domainId = newDomain.id;
-            } else {
-              // Create new domain with just the status information
-              const newDomain = await prisma.domain.create({
-                data: {
-                  name: domain,
-                  domainUpdatedDate: new Date(),
-                  response: { status: checkResult.result },
-                },
-              });
-              domainId = newDomain.id;
-            }
-          } catch (error) {
-            console.error(`Error fetching WHOIS data for ${domain}:`, error);
-            // Create domain without WHOIS data if API call fails
-            const newDomain = await prisma.domain.create({
-              data: { name: domain },
-            });
-            domainId = newDomain.id;
-          }
+          // Then, fetch WHOIS data in the background
+          // This won't block the domain addition process
+          this.fetchWhoisDataInBackground(domainId, domain);
         } else {
           domainId = existingDomain.id;
 
