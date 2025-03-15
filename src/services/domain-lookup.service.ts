@@ -131,60 +131,121 @@ export class DomainLookupService {
   /**
    * Update domain information from WHOIS API
    * @param domainId The ID of the domain to update
-   * @returns The updated domain information
+   * @param forceRefresh Whether to force refresh even if on cooldown
+   * @returns A structured response with the domain information or error details
    */
-  static async updateDomainInfo(domainId: string, forceRefresh: boolean = false): Promise<DomainLookupResponse> {
+  static async updateDomainInfo(
+    domainId: string,
+    forceRefresh: boolean = false
+  ): Promise<DomainLookupResponse> {
     try {
-      // Fetch the domain to ensure it exists
-      const existingDomain = await prisma.domain.findUnique({
-        where: { id: BigInt(domainId) },
-      });
+      // 1. Validate inputs
+      if (!domainId || isNaN(Number(domainId))) {
+        return {
+          success: false,
+          message: "Invalid domain ID provided",
+          domain: null as unknown as DomainLookupResponse["domain"],
+        };
+      }
 
+      // 2. Validate API key before proceeding
+      if (!this.API_KEY) {
+        console.error("WHOIS API key is not configured in environment variables");
+        return {
+          success: false,
+          message: "WHOIS API key is not configured. Please configure the API key in the environment variables.",
+          domain: null as unknown as DomainLookupResponse["domain"],
+        };
+      }
+      
+      // 3. Fetch the domain to ensure it exists
+      let existingDomain;
+      try {
+        existingDomain = await prisma.domain.findUnique({
+          where: { id: BigInt(domainId) },
+        });
+      } catch (error) {
+        console.error(`Error fetching domain with ID ${domainId}:`, error);
+        return {
+          success: false,
+          message: `Error fetching domain: ${error instanceof Error ? error.message : "Unknown error"}`,
+          domain: null as unknown as DomainLookupResponse["domain"],
+        };
+      }
+      
       if (!existingDomain) {
-        throw new Error(`Domain with ID ${domainId} not found`);
+        return {
+          success: false,
+          message: `Domain with ID ${domainId} not found`,
+          domain: null as unknown as DomainLookupResponse["domain"],
+        };
       }
 
       // Check if the domain was refreshed within the last 24 hours
       // Use type assertion with interface that includes the new field
-      const domainWithRefresh = existingDomain as PrismaDomain & { lastRefreshedAt?: Date | null };
-      
+      const domainWithRefresh = existingDomain as PrismaDomain & {
+        lastRefreshedAt?: Date | null;
+      };
+
       if (!forceRefresh && domainWithRefresh.lastRefreshedAt) {
         const lastRefreshed = new Date(domainWithRefresh.lastRefreshedAt);
         const cooldownPeriod = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
         const cooldownEnds = new Date(lastRefreshed.getTime() + cooldownPeriod);
         const now = new Date();
-        
+
         if (now < cooldownEnds) {
           // Calculate time remaining in the cooldown period
           const timeRemaining = cooldownEnds.getTime() - now.getTime();
           const hoursRemaining = Math.ceil(timeRemaining / (60 * 60 * 1000));
-          
+
           // Return a structured response instead of throwing an error
           return {
             success: false,
             onCooldown: true,
             hoursRemaining,
-            message: `Domain refresh on cooldown. Please try again in ${hoursRemaining} hour${hoursRemaining === 1 ? '' : 's'}.`,
-            domain: serializeDomain(domainWithRefresh as PrismaDomain)
+            message: `Domain refresh on cooldown. Please try again in ${hoursRemaining} hour${
+              hoursRemaining === 1 ? "" : "s"
+            }.`,
+            domain: serializeDomain(domainWithRefresh as PrismaDomain),
           } as DomainLookupResponse;
         }
       }
 
-      // Check if the domain is registered
-      const checkResult = await this.checkDomainRegistration(
-        existingDomain.name
-      );
+      // 5. Check if the domain is registered
+      let checkResult;
+      try {
+        checkResult = await this.checkDomainRegistration(
+          existingDomain.name
+        );
+      } catch (error) {
+        console.error(`Error checking domain registration for ${existingDomain.name}:`, error);
+        return {
+          success: false,
+          message: `Failed to check domain registration: ${error instanceof Error ? error.message : "Unknown error"}`,
+          domain: serializeDomain(existingDomain),
+        };
+      }
 
       if (checkResult.result !== "registered") {
         // Update domain with registration status only
-        const domain = await prisma.domain.update({
-          where: { id: BigInt(domainId) },
-          data: {
-            domainUpdatedDate: new Date(),
-            response: { status: checkResult.result },
-          },
-        });
-        return { success: true, domain: serializeDomain(domain) };
+        try {
+          const domain = await prisma.domain.update({
+            where: { id: BigInt(domainId) },
+            data: {
+              domainUpdatedDate: new Date(),
+              response: { status: checkResult.result },
+              ...({ lastRefreshedAt: new Date() } as { lastRefreshedAt: Date }),
+            },
+          });
+          return { success: true, domain: serializeDomain(domain) };
+        } catch (error) {
+          console.error(`Error updating domain status for ${existingDomain.name}:`, error);
+          return {
+            success: false,
+            message: `Failed to update domain status: ${error instanceof Error ? error.message : "Unknown error"}`,
+            domain: serializeDomain(existingDomain),
+          };
+        }
       }
 
       // Get detailed WHOIS information
@@ -255,7 +316,13 @@ export class DomainLookupService {
       return { success: true, domain: serializeDomain(domain) };
     } catch (error) {
       console.error(`Error updating domain info for ID ${domainId}:`, error);
-      throw error;
+      // Return a structured error response instead of throwing
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      return {
+        success: false,
+        message: `Failed to update domain information: ${errorMessage}`,
+        domain: null as unknown as DomainLookupResponse["domain"],
+      };
     }
   }
 

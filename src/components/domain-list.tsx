@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { useDomains } from "@/hooks/use-domains";
 import { useToast } from "@/components/ui/use-toast";
 import { DeleteDomainDialog } from "./delete-domain-dialog";
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 
 interface DomainListProps {
   refreshTrigger?: number;
@@ -126,31 +126,31 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
       setRefreshingDomains((prev) => [...prev, domain.id]);
 
       // Use a relative URL which will automatically use the correct port
-      const response = await fetch(
-        `/api/domains/${domain.id}/lookup`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      const response = await fetch(`/api/domains/${domain.id}/lookup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ forceRefresh: true }),
+      });
 
       const result = await response.json();
-      
+
       if (response.ok && result.success) {
         // Success case
         await fetchDomains();
         toast({
           title: "WHOIS Updated",
           description: `Domain information for ${domain.name} refreshed successfully`,
-          id: uuidv4()
+          id: uuidv4(),
         });
       } else if (response.status === 429 && result.onCooldown) {
         // Cooldown case
         toast({
           title: "Refresh Cooldown",
-          description: result.message || `Domain refresh on cooldown. Please try again later.`,
+          description:
+            result.message ||
+            `Domain refresh on cooldown. Please try again later.`,
           variant: "default",
-          id: uuidv4()
+          id: uuidv4(),
         });
       } else {
         // Other error case
@@ -159,9 +159,12 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to refresh domain information",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to refresh domain information",
         variant: "destructive",
-        id: uuidv4()
+        id: uuidv4(),
       });
     } finally {
       setRefreshingDomains((prev) => prev.filter((id) => id !== domain.id));

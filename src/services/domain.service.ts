@@ -298,58 +298,10 @@ export class DomainService {
           continue;
         }
 
-        let domainId: bigint;
-
-        if (!existingDomain) {
-          // First, create the domain with minimal information
-          // This ensures the domain is added quickly without waiting for API calls
-          const newDomain = await prisma.domain.create({
-            data: {
-              name: domain,
-              domainExpiryDate: null, // Explicitly set to null to show '...' in the UI
-              domainUpdatedDate: new Date(),
-            },
-          });
-          domainId = newDomain.id;
-
-          // Then, fetch WHOIS data in the background
-          // This won't block the domain addition process
-          this.fetchWhoisDataInBackground(domainId, domain);
-        } else {
-          domainId = existingDomain.id;
-
-          // Check if user already has this domain
-          const existingUserDomain = await prisma.userDomains.findUnique({
-            where: {
-              userId_domainId: {
-                userId: BigInt(userId),
-                domainId,
-              },
-            },
-          });
-
-          if (existingUserDomain) {
-            dbDuplicates.push(domain);
-            continue;
-          }
-        }
-
-        // Link domain to user
-        await prisma.userDomains.create({
-          data: {
-            userId: BigInt(userId),
-            domainId,
-          },
-        });
-
-        // Return domain data
-        const domainData = await prisma.domain.findUnique({
-          where: { id: domainId },
-        });
-
-        if (domainData) {
-          added.push(serializeDomain(domainData));
-        }
+        // Use addDomainForUser to handle the domain addition
+        // This reuses the existing logic for adding a single domain
+        const addedDomain = await this.addDomainForUser(userId, domain);
+        added.push(addedDomain);
       } catch (error) {
         console.error(`Error adding domain ${domain}:`, error);
         invalidDomains.push(domain);
