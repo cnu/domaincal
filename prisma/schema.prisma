@@ -32,6 +32,7 @@ model Domain {
   domainExpiryDate  DateTime?
   domainCreatedDate DateTime?
   domainUpdatedDate DateTime?
+  lastRefreshedAt   DateTime?
   registrar         String?
   emails           String?
   createdAt        DateTime @default(now())
