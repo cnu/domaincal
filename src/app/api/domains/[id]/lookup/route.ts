@@ -1,21 +1,17 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { DomainLookupService } from "@/services/domain-lookup.service";
 import prisma from "@/lib/prisma";
 
-// Define the context type for dynamic route parameters
-type RouteContext = {
-  params: {
-    id: string;
-  };
-};
-
 /**
  * POST handler to trigger a WHOIS lookup for a domain
  * This allows users to manually refresh domain information
  */
-export async function POST(request: NextRequest, { params }: RouteContext) {
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     // 1. Authentication check
     const session = await getServerSession(authOptions);
@@ -24,7 +20,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     }
 
     // 2. Extract and validate domain ID
-    const domainId = params.id;
+    const resolvedParams = await params;
+    const domainId = resolvedParams.id;
     if (!domainId || isNaN(Number(domainId))) {
       return NextResponse.json({ error: "Invalid domain ID" }, { status: 400 });
     }

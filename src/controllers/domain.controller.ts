@@ -8,6 +8,7 @@ export class DomainController {
    * Get all domains for the authenticated user
    */
   static async getUserDomains() {
+    console.log("kakkakakak");
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
@@ -19,7 +20,8 @@ export class DomainController {
       return NextResponse.json({ domains });
     } catch (error) {
       console.error("Error fetching domains:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to fetch domains";
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to fetch domains";
       return NextResponse.json({ error: errorMessage }, { status: 500 });
     }
   }
