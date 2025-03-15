@@ -42,19 +42,23 @@ export class DomainService {
     // Sanitize and validate domain
     const sanitizedDomain = sanitizeDomain(domainName);
     if (!sanitizedDomain || !validateDomain(sanitizedDomain)) {
-      // Return a default DomainResponse object with error indication
-      // We use an empty id to indicate an error state that the UI can check for
-      return {
-        id: "",
+      // Create a mock domain object that matches the Prisma schema
+      const mockDomain = {
+        id: BigInt(0), // Use BigInt(0) instead of empty string
         name: domainName,
         domainExpiryDate: null,
         domainCreatedDate: null,
+        domainUpdatedDate: null,
+        lastRefreshedAt: null,
         registrar: null,
         emails: null,
         response: null,
         createdAt: new Date(),
-        updatedAt: null,
+        updatedAt: new Date(), // Use new Date() instead of null
       };
+
+      // Return a serialized domain with error indication
+      return serializeDomain(mockDomain);
     }
 
     // Check if domain already exists
@@ -76,17 +80,7 @@ export class DomainService {
 
     // If user already has this domain, return it as a duplicate
     if (existingUserDomain && existingDomain) {
-      return {
-        id: existingDomain.id.toString(),
-        name: existingDomain.name,
-        domainExpiryDate: existingDomain.domainExpiryDate,
-        domainCreatedDate: existingDomain.domainCreatedDate,
-        registrar: existingDomain.registrar,
-        emails: existingDomain.emails,
-        response: existingDomain.response,
-        createdAt: existingDomain.createdAt,
-        updatedAt: existingDomain.updatedAt,
-      };
+      return serializeDomain(existingDomain);
     }
 
     let domainId: bigint;
@@ -107,7 +101,6 @@ export class DomainService {
       // Then, fetch WHOIS data in the background
       // This won't block the domain addition process
       this.fetchWhoisDataInBackground(domainId, sanitizedDomain);
-
     } else {
       domainId = existingDomain.id;
     }

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { DomainResponse, serializeDomain } from "@/models/domain.model";
+import { DomainLookupResponse, serializeDomain } from "@/models/domain.model";
+import { Domain as PrismaDomain } from "@prisma/client";
 
 interface WhoisCheckResponse {
   domain: string;
@@ -132,7 +133,7 @@ export class DomainLookupService {
    * @param domainId The ID of the domain to update
    * @returns The updated domain information
    */
-  static async updateDomainInfo(domainId: string): Promise<DomainResponse> {
+  static async updateDomainInfo(domainId: string, forceRefresh: boolean = false): Promise<DomainLookupResponse> {
     try {
       // Fetch the domain to ensure it exists
       const existingDomain = await prisma.domain.findUnique({
@@ -141,6 +142,32 @@ export class DomainLookupService {
 
       if (!existingDomain) {
         throw new Error(`Domain with ID ${domainId} not found`);
+      }
+
+      // Check if the domain was refreshed within the last 24 hours
+      // Use type assertion with interface that includes the new field
+      const domainWithRefresh = existingDomain as PrismaDomain & { lastRefreshedAt?: Date | null };
+      
+      if (!forceRefresh && domainWithRefresh.lastRefreshedAt) {
+        const lastRefreshed = new Date(domainWithRefresh.lastRefreshedAt);
+        const cooldownPeriod = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+        const cooldownEnds = new Date(lastRefreshed.getTime() + cooldownPeriod);
+        const now = new Date();
+        
+        if (now < cooldownEnds) {
+          // Calculate time remaining in the cooldown period
+          const timeRemaining = cooldownEnds.getTime() - now.getTime();
+          const hoursRemaining = Math.ceil(timeRemaining / (60 * 60 * 1000));
+          
+          // Return a structured response instead of throwing an error
+          return {
+            success: false,
+            onCooldown: true,
+            hoursRemaining,
+            message: `Domain refresh on cooldown. Please try again in ${hoursRemaining} hour${hoursRemaining === 1 ? '' : 's'}.`,
+            domain: serializeDomain(domainWithRefresh as PrismaDomain)
+          } as DomainLookupResponse;
+        }
       }
 
       // Check if the domain is registered
@@ -157,7 +184,7 @@ export class DomainLookupService {
             response: { status: checkResult.result },
           },
         });
-        return serializeDomain(domain);
+        return { success: true, domain: serializeDomain(domain) };
       }
 
       // Get detailed WHOIS information
@@ -218,13 +245,14 @@ export class DomainLookupService {
           domainExpiryDate: expiryDate,
           domainCreatedDate: createdDate,
           domainUpdatedDate: new Date(),
+          ...({ lastRefreshedAt: new Date() } as { lastRefreshedAt: Date }),
           registrar,
           emails,
           response: JSON.parse(JSON.stringify(whoisInfo)),
         },
       });
 
-      return serializeDomain(domain);
+      return { success: true, domain: serializeDomain(domain) };
     } catch (error) {
       console.error(`Error updating domain info for ID ${domainId}:`, error);
       throw error;

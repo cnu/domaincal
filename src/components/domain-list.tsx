@@ -2,19 +2,33 @@
 
 import { useState, useMemo, ChangeEvent, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { format } from "date-fns";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
+import { Search, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import Fuse from "fuse.js";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { useDomains } from "@/hooks/use-domains";
+import { useToast } from "@/components/ui/use-toast";
 import { DeleteDomainDialog } from "./delete-domain-dialog";
+import { v4 as uuidv4 } from 'uuid';
 
 interface DomainListProps {
   refreshTrigger?: number;
 }
 
+interface Domain {
+  id: string;
+  name: string;
+  domainExpiryDate: string | null;
+  lastRefreshedAt?: string | null;
+  domainCreatedDate?: string | null;
+  domainUpdatedDate?: string | null;
+  registrar?: string | null;
+  emails?: string | null;
+  nameServers?: string[] | null;
+  status?: string | null;
+}
 const DOMAINS_PER_PAGE = 10;
 
 export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
@@ -22,17 +36,15 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  const [refreshingDomains, setRefreshingDomains] = useState<string[]>([]);
+  const { toast } = useToast();
 
-  // Use TanStack Query to fetch domains
   const {
     data: domainData,
     isLoading: loading,
     refetch: fetchDomains,
   } = useDomains(refreshTrigger, currentPage, DOMAINS_PER_PAGE, searchQuery);
 
-  // Domain deletion is now handled by the DeleteDomainDialog component
-
-  // Extract domains and pagination data from the query result
   const domains = useMemo(
     () => domainData?.domains || [],
     [domainData?.domains]
@@ -40,7 +52,6 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
   const totalPages = domainData?.totalPages || 1;
   const totalDomains = domainData?.total || 0;
 
-  // Configure Fuse.js for fuzzy search
   const fuse = useMemo(() => {
     return new Fuse(domains, {
       keys: ["name"],
@@ -49,44 +60,30 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     });
   }, [domains]);
 
-  // Update isSearching state when searchQuery changes
   useEffect(() => {
     setIsSearching(!!searchQuery.trim());
   }, [searchQuery]);
 
-  // Get filtered domains based on search query
   const filteredDomains = useMemo(() => {
-    if (!searchQuery.trim()) {
-      // If not searching, just return the domains from the paginated API
-      return domains;
-    }
-
+    if (!searchQuery.trim()) return domains;
     const results = fuse.search(searchQuery);
     return results.map((result) => result.item);
   }, [domains, searchQuery, fuse]);
 
-  // Get paginated domains
   const paginatedDomains = useMemo(() => {
-    // If we're searching, we need to handle pagination client-side
     if (isSearching) {
       const startIndex = (currentPage - 1) * DOMAINS_PER_PAGE;
       const endIndex = startIndex + DOMAINS_PER_PAGE;
       return filteredDomains.slice(startIndex, endIndex);
     }
-
-    // If not searching, the API already returned paginated results
     return filteredDomains;
   }, [filteredDomains, currentPage, isSearching]);
 
-  // Sort domains by expiration date (closest expiry dates first)
   const sortedDomains = useMemo(() => {
     return [...paginatedDomains].sort((a, b) => {
-      // Handle null expiry dates (put them at the end)
       if (!a.domainExpiryDate && !b.domainExpiryDate) return 0;
       if (!a.domainExpiryDate) return 1;
       if (!b.domainExpiryDate) return -1;
-
-      // Sort by date (closest expiry dates first)
       return (
         new Date(a.domainExpiryDate).getTime() -
         new Date(b.domainExpiryDate).getTime()
@@ -94,7 +91,6 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     });
   }, [paginatedDomains]);
 
-  // Recalculate total pages when searching client-side
   const calculatedTotalPages = useMemo(() => {
     if (isSearching) {
       return Math.max(1, Math.ceil(filteredDomains.length / DOMAINS_PER_PAGE));
@@ -109,11 +105,9 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
       Math.ceil(newTotalDomains / DOMAINS_PER_PAGE)
     );
 
-    // If we deleted the last item on the last page, go to previous page
     if (currentPage > newTotalPages) {
       setCurrentPage(newTotalPages);
     } else {
-      // Otherwise just refresh the current page
       fetchDomains();
     }
   };
@@ -124,14 +118,114 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
 
   const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
-    setCurrentPage(1); // Reset to first page on search
+    setCurrentPage(1);
   };
+
+  const refreshDomain = async (domain: Domain) => {
+    try {
+      setRefreshingDomains((prev) => [...prev, domain.id]);
+
+      // Use a relative URL which will automatically use the correct port
+      const response = await fetch(
+        `/api/domains/${domain.id}/lookup`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      const result = await response.json();
+      
+      if (response.ok && result.success) {
+        // Success case
+        await fetchDomains();
+        toast({
+          title: "WHOIS Updated",
+          description: `Domain information for ${domain.name} refreshed successfully`,
+          id: uuidv4()
+        });
+      } else if (response.status === 429 && result.onCooldown) {
+        // Cooldown case
+        toast({
+          title: "Refresh Cooldown",
+          description: result.message || `Domain refresh on cooldown. Please try again later.`,
+          variant: "default",
+          id: uuidv4()
+        });
+      } else {
+        // Other error case
+        throw new Error(result.error || "Failed to refresh domain information");
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to refresh domain information",
+        variant: "destructive",
+        id: uuidv4()
+      });
+    } finally {
+      setRefreshingDomains((prev) => prev.filter((id) => id !== domain.id));
+    }
+  };
+
+  const renderDomainItem = (domain: Domain) => (
+    <div
+      key={domain.id}
+      className="border rounded-lg p-4 flex items-center justify-between transition-all duration-200 hover:shadow-md hover:border-gray-400 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+    >
+      <div className="flex items-center space-x-4">
+        <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
+          <div className="text-center">
+            {domain.domainExpiryDate ? (
+              <>
+                <div className="text-sm">
+                  {format(new Date(domain.domainExpiryDate), "dd MMM")}
+                </div>
+                <div className="font-bold">
+                  {format(new Date(domain.domainExpiryDate), "yyyy")}
+                </div>
+              </>
+            ) : (
+              <div className="text-2xl font-bold">...</div>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-col">
+          <span className="font-bold">{domain.name}</span>
+          {domain.lastRefreshedAt && (
+            <span className="text-xs text-muted-foreground">
+              Last refreshed:{" "}
+              {formatDistanceToNow(new Date(domain.lastRefreshedAt))} ago
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center space-x-2">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => refreshDomain(domain)}
+          disabled={refreshingDomains.includes(domain.id)}
+          title="Refresh domain information"
+        >
+          <RefreshCw
+            className={`h-4 w-4 ${
+              refreshingDomains.includes(domain.id) ? "animate-spin" : ""
+            }`}
+          />
+        </Button>
+        <DeleteDomainDialog
+          domainId={domain.id}
+          domainName={domain.name}
+          onDeleted={handleDomainDeleted}
+        />
+      </div>
+    </div>
+  );
 
   const renderPagination = () => {
     const totalPagesToUse = isSearching ? calculatedTotalPages : totalPages;
-    const pageNumbers = [];
     const maxPagesToShow = 5;
-
     let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
     const endPage = Math.min(totalPagesToUse, startPage + maxPagesToShow - 1);
 
@@ -139,9 +233,10 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
       startPage = Math.max(1, endPage - maxPagesToShow + 1);
     }
 
-    for (let i = startPage; i <= endPage; i++) {
-      pageNumbers.push(i);
-    }
+    const pageNumbers = Array.from(
+      { length: endPage - startPage + 1 },
+      (_, i) => startPage + i
+    );
 
     return (
       <div className="flex items-center justify-center space-x-2 mt-6">
@@ -216,7 +311,6 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
       <CardHeader>
         <div className="flex flex-col md:flex-row md:items-center justify-between">
           <CardTitle className="text-2xl font-bold">Your Domains</CardTitle>
-
           <div className="relative mt-2 md:mt-0 md:w-64">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -244,48 +338,9 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
             </div>
 
             <div className="space-y-4">
-              {sortedDomains.map((domain) => (
-                <div
-                  key={domain.id}
-                  className="border rounded-lg p-4 flex items-center justify-between transition-all duration-200 hover:shadow-md hover:border-gray-400 dark:hover:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg">
-                      <div className="text-center">
-                        {domain.domainExpiryDate ? (
-                          <>
-                            <div className="text-sm">
-                              {format(
-                                new Date(domain.domainExpiryDate),
-                                "dd MMM"
-                              )}
-                            </div>
-                            <div className="font-bold">
-                              {format(
-                                new Date(domain.domainExpiryDate),
-                                "yyyy"
-                              )}
-                            </div>
-                          </>
-                        ) : (
-                          <div className="text-2xl font-bold">...</div>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="font-bold">{domain.name}</span>
-                    </div>
-                  </div>
-                  <DeleteDomainDialog
-                    domainId={domain.id}
-                    domainName={domain.name}
-                    onDeleted={handleDomainDeleted}
-                  />
-                </div>
-              ))}
+              {sortedDomains.map(renderDomainItem)}
             </div>
 
-            {/* Debug pagination info */}
             <div className="text-xs text-muted-foreground mt-4">
               Debug: {isSearching ? filteredDomains.length : totalDomains} total
               domains,
@@ -293,7 +348,6 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
               on page {currentPage}
             </div>
 
-            {/* Render pagination if needed */}
             {(isSearching ? filteredDomains.length : totalDomains) >
               DOMAINS_PER_PAGE && renderPagination()}
           </>

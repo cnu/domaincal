@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { DomainLookupService } from "@/services/domain-lookup.service";
+import { DomainLookupResponse } from "@/models/domain.model";
 import prisma from "@/lib/prisma";
 
 // Define the context type for dynamic route parameters
@@ -45,9 +46,14 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     }
 
     // Trigger the WHOIS lookup
-    const updatedDomain = await DomainLookupService.updateDomainInfo(domainId);
+    const result: DomainLookupResponse = await DomainLookupService.updateDomainInfo(domainId);
 
-    return NextResponse.json({ success: true, domain: updatedDomain });
+    // Check if the domain is on cooldown
+    if (!result.success && result.onCooldown) {
+      return NextResponse.json(result, { status: 429 }); // 429 Too Many Requests is appropriate for rate limiting
+    }
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Error looking up domain:", error);
     return NextResponse.json(

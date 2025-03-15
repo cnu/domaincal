@@ -8,6 +8,11 @@ interface Domain {
   id: string;
   name: string;
   domainExpiryDate: string | null;
+  domainCreatedDate?: string | null;
+  domainUpdatedDate?: string | null;
+  lastRefreshedAt?: string | null;
+  registrar?: string | null;
+  emails?: string | null;
   createdAt: string;
   updatedAt: string | null;
 }
@@ -286,17 +291,20 @@ export function useRefreshDomainWhois() {
 
   return useMutation({
     mutationFn: async (domainId: string) => {
+      // Use a relative URL to avoid port issues
       const response = await fetch(`/api/domains/${domainId}/lookup`, {
-        method: "POST",
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to refresh domain information");
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to refresh domain information');
       }
 
-      const result = await response.json();
-      return result;
+      return await response.json();
     },
     onSuccess: (data) => {
       // Show success toast

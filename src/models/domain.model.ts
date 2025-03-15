@@ -8,6 +8,7 @@ export interface DomainModel {
   domainExpiryDate: Date | null;
   domainCreatedDate: Date | null;
   domainUpdatedDate: Date | null;
+  lastRefreshedAt: Date | null;
   registrar: string | null;
   emails: string | null;
   response: JsonValue | null;
@@ -20,6 +21,8 @@ export interface DomainResponse {
   name: string;
   domainExpiryDate: Date | null;
   domainCreatedDate: Date | null;
+  domainUpdatedDate: Date | null;
+  lastRefreshedAt: Date | null;
   registrar: string | null;
   emails: string | null;
   response: JsonValue | null;
@@ -27,17 +30,33 @@ export interface DomainResponse {
   updatedAt: Date | null;
 }
 
-export const serializeDomain = (domain: PrismaDomain): DomainResponse => ({
-  id: domain.id.toString(),
-  name: domain.name,
-  domainExpiryDate: domain.domainExpiryDate,
-  domainCreatedDate: domain.domainCreatedDate,
-  registrar: domain.registrar,
-  emails: domain.emails,
-  response: domain.response,
-  createdAt: domain.createdAt,
-  updatedAt: domain.updatedAt,
-});
+export interface DomainLookupResponse {
+  success: boolean;
+  onCooldown?: boolean;
+  hoursRemaining?: number;
+  message?: string;
+  domain: DomainResponse;
+}
+
+export const serializeDomain = (domain: PrismaDomain): DomainResponse => {
+  // Extract lastRefreshedAt with proper type handling
+  const extendedDomain = domain as PrismaDomain & { lastRefreshedAt?: Date | null };
+  const lastRefreshedAt = extendedDomain.lastRefreshedAt || null;
+  
+  return {
+    id: domain.id.toString(),
+    name: domain.name,
+    domainExpiryDate: domain.domainExpiryDate,
+    domainCreatedDate: domain.domainCreatedDate,
+    domainUpdatedDate: domain.domainUpdatedDate,
+    lastRefreshedAt,
+    registrar: domain.registrar,
+    emails: domain.emails,
+    response: domain.response,
+    createdAt: domain.createdAt,
+    updatedAt: domain.updatedAt,
+  };
+};
 
 export const validateDomain = (domain: string): boolean => {
   return DomainValidationService.validateDomain(domain);
