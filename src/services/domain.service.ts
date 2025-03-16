@@ -33,6 +33,97 @@ export class DomainService {
   }
 
   /**
+   * Get paginated domains for a user
+   * @param userId User ID
+   * @param page Page number (1-based)
+   * @param limit Number of items per page
+   * @returns Paginated domains with metadata
+   */
+  static async getPaginatedDomains(
+    userId: string,
+    page: number,
+    limit: number
+  ): Promise<{
+    domains: DomainResponse[];
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  }> {
+    // Validate pagination parameters
+    const validPage = page > 0 ? page : 1;
+    const validLimit = limit > 0 && limit <= 50 ? limit : 10; // Cap at 50 items per page
+
+    // Calculate skip for pagination
+    const skip = (validPage - 1) * validLimit;
+
+    // Get total count for pagination metadata
+    const totalDomains = await prisma.domain.count({
+      where: {
+        users: {
+          some: {
+            userId: BigInt(userId),
+          },
+        },
+      },
+    });
+    // Get paginated domains
+    const domains = await prisma.domain.findMany({
+      where: {
+        users: {
+          some: {
+            userId: BigInt(userId),
+          },
+        },
+      },
+      orderBy: [
+        // Sort by expiry date ascending (closest expiry dates first, nulls last)
+        { domainExpiryDate: "asc" },
+        // Secondary sort by name for domains with no expiry date
+        { name: "asc" },
+      ],
+      skip,
+      take: validLimit,
+    });
+
+    // Calculate total pages
+    const totalPages = Math.ceil(totalDomains / validLimit);
+
+    return {
+      domains: domains.map(serializeDomain),
+      page: validPage,
+      limit: validLimit,
+      total: totalDomains,
+      totalPages,
+    };
+  }
+
+  /**
+   * Check if a user owns a specific domain
+   * @param userId User ID
+   * @param domainId Domain ID
+   * @returns True if the user owns the domain, false otherwise
+   */
+  static async checkUserOwnsDomain(
+    userId: string,
+    domainId: string
+  ): Promise<boolean> {
+    const userDomain = await prisma.userDomains.findUnique({
+      where: {
+        userId_domainId: {
+          userId: BigInt(userId),
+          domainId: BigInt(domainId),
+        },
+      },
+      include: {
+        domain: true, // Include domain details for validation
+      },
+    });
+
+    return !!userDomain && !!userDomain.domain;
+  }
+
+  /**
    * Add a domain for a user
    */
   static async addDomainForUser(
@@ -140,12 +231,54 @@ export class DomainService {
    * @param domainId The ID of the domain in the database
    * @param domainName The domain name to fetch WHOIS data for
    */
+  /**
+   * Delete a domain for a user
+   * @param userId User ID
+   * @param domainId Domain ID
+   * @returns void
+   */
+  static async deleteDomainForUser(
+    userId: string,
+    domainId: string
+  ): Promise<void> {
+    try {
+      // Delete the user-domain association
+      await prisma.userDomains.delete({
+        where: {
+          userId_domainId: {
+            userId: BigInt(userId),
+            domainId: BigInt(domainId),
+          },
+        },
+      });
+
+      // Check if any other users are tracking this domain
+      const otherUserTracking = await prisma.userDomains.findFirst({
+        where: {
+          domainId: BigInt(domainId),
+        },
+      });
+
+      // If no other users are tracking this domain, delete it
+      if (!otherUserTracking) {
+        await prisma.domain.delete({
+          where: {
+            id: BigInt(domainId),
+          },
+        });
+      }
+    } catch (error) {
+      console.error(`Error deleting domain ${domainId} for user ${userId}:`, error);
+      throw error;
+    }
+  }
+  
   static async fetchWhoisDataInBackground(
     domainId: bigint,
     domainName: string
   ): Promise<void> {
     try {
-      console.log(`Fetching WHOIS data in background for ${domainName}`);
+      // console.log(`Fetching WHOIS data in background for ${domainName}`);
 
       // Add a small delay to ensure the UI has time to render the new domain
       // This makes the user experience smoother
@@ -232,7 +365,7 @@ export class DomainService {
           },
         });
 
-        console.log(`Successfully updated WHOIS data for ${domainName}`);
+        // console.log(`Successfully updated WHOIS data for ${domainName}`);
       } else {
         // Update domain with just the status information
         await prisma.domain.update({
@@ -243,7 +376,7 @@ export class DomainService {
           },
         });
 
-        console.log(`Domain ${domainName} is not registered`);
+        // console.log(`Domain ${domainName} is not registered`);
       }
     } catch (error) {
       console.error(`Error fetching WHOIS data for ${domainName}:`, error);

@@ -28,6 +28,8 @@ export interface DomainResponse {
   response: JsonValue | null;
   createdAt: Date;
   updatedAt: Date | null;
+  onCooldown?: boolean;
+  cooldownEndsAt?: Date | null;
 }
 
 export interface DomainLookupResponse {
@@ -43,6 +45,21 @@ export const serializeDomain = (domain: PrismaDomain): DomainResponse => {
   const extendedDomain = domain as PrismaDomain & { lastRefreshedAt?: Date | null };
   const lastRefreshedAt = extendedDomain.lastRefreshedAt || null;
   
+  // Calculate cooldown status
+  let onCooldown = false;
+  let cooldownEndsAt = null;
+  
+  if (lastRefreshedAt) {
+    const cooldownPeriod = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+    const cooldownEndsTime = new Date(new Date(lastRefreshedAt).getTime() + cooldownPeriod);
+    const now = new Date();
+    
+    if (now < cooldownEndsTime) {
+      onCooldown = true;
+      cooldownEndsAt = cooldownEndsTime;
+    }
+  }
+  
   return {
     id: domain.id.toString(),
     name: domain.name,
@@ -55,6 +72,8 @@ export const serializeDomain = (domain: PrismaDomain): DomainResponse => {
     response: domain.response,
     createdAt: domain.createdAt,
     updatedAt: domain.updatedAt,
+    onCooldown,
+    cooldownEndsAt,
   };
 };
 

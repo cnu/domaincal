@@ -8,10 +8,8 @@ import Fuse from "fuse.js";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { useDomains } from "@/hooks/use-domains";
-import { useToast } from "@/components/ui/use-toast";
+import { useDomains, useRefreshDomain } from "@/hooks/use-domains";
 import { DeleteDomainDialog } from "./delete-domain-dialog";
-import { v4 as uuidv4 } from "uuid";
 
 interface DomainListProps {
   refreshTrigger?: number;
@@ -28,6 +26,8 @@ interface Domain {
   emails?: string | null;
   nameServers?: string[] | null;
   status?: string | null;
+  onCooldown?: boolean;
+  cooldownEndsAt?: string | Date | null;
 }
 const DOMAINS_PER_PAGE = 10;
 
@@ -36,14 +36,20 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [refreshingDomains, setRefreshingDomains] = useState<string[]>([]);
-  const { toast } = useToast();
+  // Using useToast for domain-related notifications, managed by our hooks now
 
   const {
     data: domainData,
     isLoading: loading,
     refetch: fetchDomains,
   } = useDomains(refreshTrigger, currentPage, DOMAINS_PER_PAGE, searchQuery);
+
+  // Hook for refreshing domain information
+  const {
+    mutate: refreshDomainMutation,
+    isPending: isRefreshing,
+    variables: currentRefreshingId,
+  } = useRefreshDomain();
 
   const domains = useMemo(
     () => domainData?.domains || [],
@@ -121,54 +127,14 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     setCurrentPage(1);
   };
 
-  const refreshDomain = async (domain: Domain) => {
-    try {
-      setRefreshingDomains((prev) => [...prev, domain.id]);
-
-      // Use a relative URL which will automatically use the correct port
-      const response = await fetch(`/api/domains/${domain.id}/lookup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ forceRefresh: true }),
-      });
-
-      const result = await response.json();
-
-      if (response.ok && result.success) {
-        // Success case
-        await fetchDomains();
-        toast({
-          title: "WHOIS Updated",
-          description: `Domain information for ${domain.name} refreshed successfully`,
-          id: uuidv4(),
-        });
-      } else if (response.status === 429 && result.onCooldown) {
-        // Cooldown case
-        toast({
-          title: "Refresh Cooldown",
-          description:
-            result.message ||
-            `Domain refresh on cooldown. Please try again later.`,
-          variant: "default",
-          id: uuidv4(),
-        });
-      } else {
-        // Other error case
-        throw new Error(result.error || "Failed to refresh domain information");
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to refresh domain information",
-        variant: "destructive",
-        id: uuidv4(),
-      });
-    } finally {
-      setRefreshingDomains((prev) => prev.filter((id) => id !== domain.id));
-    }
+  const refreshDomain = (domain: Domain) => {
+    // Call the mutation function from our hook
+    refreshDomainMutation(domain.id, {
+      // On success, refetch the domains list to update UI
+      onSuccess: () => {
+        fetchDomains();
+      },
+    });
   };
 
   const renderDomainItem = (domain: Domain) => (
@@ -205,15 +171,29 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
       </div>
       <div className="flex items-center space-x-2">
         <Button
-          variant="outline"
+          variant={domain.onCooldown ? "secondary" : "outline"}
           size="icon"
           onClick={() => refreshDomain(domain)}
-          disabled={refreshingDomains.includes(domain.id)}
-          title="Refresh domain information"
+          disabled={
+            (isRefreshing && currentRefreshingId === domain.id) ||
+            domain.onCooldown
+          }
+          title={
+            domain.onCooldown && domain.cooldownEndsAt
+              ? `Refresh on cooldown until ${new Date(
+                  domain.cooldownEndsAt
+                ).toLocaleString()}`
+              : "Refresh domain information"
+          }
+          className={domain.onCooldown ? "opacity-60" : ""}
         >
           <RefreshCw
             className={`h-4 w-4 ${
-              refreshingDomains.includes(domain.id) ? "animate-spin" : ""
+              isRefreshing && currentRefreshingId === domain.id
+                ? "animate-spin"
+                : domain.onCooldown
+                ? "text-muted-foreground"
+                : ""
             }`}
           />
         </Button>

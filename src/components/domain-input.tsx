@@ -27,9 +27,7 @@ const MAX_DOMAINS = 20;
 export function DomainInput({ onSubmit, isLoading }: DomainInputProps) {
   const { toast } = useToast();
   const [value, setValue] = useState("");
-  const [validationError, setValidationError] = useState<string | null>(
-    null
-  );
+  const [validationError, setValidationError] = useState<string | null>(null);
   const { data: session } = useSession();
 
   // Parse and validate domains from the input
@@ -45,33 +43,33 @@ export function DomainInput({ onSubmit, isLoading }: DomainInputProps) {
       const errors: string[] = [];
       const validDomains: string[] = [];
 
-    // Check maximum domains limit first - this is a hard limit
-    if (rawDomains.length > MAX_DOMAINS) {
-      errors.push(
-        `Maximum ${MAX_DOMAINS} domains allowed per submission. You entered ${rawDomains.length}.`
-      );
-      // Don't return any domains if over the limit
-      return {
-        domains: [],
-        errors,
-      };
-    }
-
-    for (const domain of rawDomains) {
-      // Check for valid domain format
-      if (!validateDomain(domain)) {
-        errors.push(`Invalid domain format: ${domain}`);
-        continue;
+      // Check maximum domains limit first - this is a hard limit
+      if (rawDomains.length > MAX_DOMAINS) {
+        errors.push(
+          `Maximum ${MAX_DOMAINS} domains allowed per submission. You entered ${rawDomains.length}.`
+        );
+        // Don't return any domains if over the limit
+        return {
+          domains: [],
+          errors,
+        };
       }
 
-      // Check for duplicates
-      if (uniqueDomains.has(domain)) {
-        continue; // Skip duplicates silently
-      }
+      for (const domain of rawDomains) {
+        // Check for valid domain format
+        if (!validateDomain(domain)) {
+          errors.push(`Invalid domain format: ${domain}`);
+          continue;
+        }
 
-      uniqueDomains.add(domain);
-      validDomains.push(domain);
-    }
+        // Check for duplicates
+        if (uniqueDomains.has(domain)) {
+          continue; // Skip duplicates silently
+        }
+
+        uniqueDomains.add(domain);
+        validDomains.push(domain);
+      }
 
       return {
         domains: validDomains,
@@ -135,7 +133,7 @@ export function DomainInput({ onSubmit, isLoading }: DomainInputProps) {
 
     // Get domain count first to check if over limit
     const domainCount = getDomainCount();
-    console.log(`Submitting form with ${domainCount} domains`);
+    // console.log(`Submitting form with ${domainCount} domains`);
 
     if (domainCount > MAX_DOMAINS) {
       toast({
@@ -148,9 +146,9 @@ export function DomainInput({ onSubmit, isLoading }: DomainInputProps) {
     }
 
     const { domains, errors } = parseDomains(value);
-    console.log(
-      `Parsed ${domains.length} valid domains with ${errors.length} errors`
-    );
+    // console.log(
+    //   `Parsed ${domains.length} valid domains with ${errors.length} errors`
+    // );
 
     if (errors.length > 0) {
       toast({
