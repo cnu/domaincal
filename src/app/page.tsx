@@ -17,7 +17,7 @@ export default function Home() {
   const [authView, setAuthView] = useState<"login" | "register">("register");
   const [refreshDomainList, setRefreshDomainList] = useState(0);
   const { toast } = useToast();
-  
+
   // Use TanStack Query hooks
   const loginMutation = useLogin();
   const registerMutation = useRegister();
@@ -74,7 +74,7 @@ export default function Home() {
     }
 
     // Log the domains being submitted
-    console.log(`Submitting ${domains.length} domains:`, domains);
+    // console.log(`Submitting ${domains.length} domains:`, domains);
 
     if (domains.length > 20) {
       const id = uuidv4();
@@ -90,7 +90,7 @@ export default function Home() {
     try {
       await addDomainsMutation.mutateAsync(domains);
       // Trigger a refresh of the domain list
-      setRefreshDomainList(prev => prev + 1);
+      setRefreshDomainList((prev) => prev + 1);
     } catch (error) {
       // Error handling is done in the mutation
       console.error("Domain submission error:", error);

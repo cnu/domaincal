@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { DomainService } from "@/services/domain.service";
 import { DomainLookupService } from "@/services/domain-lookup.service";
 import { processDomainList } from "@/models/domain.model";
+import { ApiResponse } from "@/utils/api-response";
 
 /**
  * Domain Controller - Handles all domain-related HTTP requests and responses
@@ -17,17 +18,15 @@ export class DomainController {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return ApiResponse.unauthorized();
     }
 
     try {
       const domains = await DomainService.getUserDomains(session.user.id);
-      return NextResponse.json({ domains });
+      return ApiResponse.success({ domains });
     } catch (error) {
       console.error("Error fetching domains:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to fetch domains";
-      return NextResponse.json({ error: errorMessage }, { status: 500 });
+      return ApiResponse.serverError(error, "Failed to fetch domains");
     }
   }
 
@@ -38,7 +37,7 @@ export class DomainController {
     const session = await getServerSession(authOptions);
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return ApiResponse.unauthorized();
     }
 
     try {
@@ -47,12 +46,10 @@ export class DomainController {
         page,
         limit
       );
-      return NextResponse.json(result);
+      return ApiResponse.success(result);
     } catch (error) {
       console.error("Error fetching paginated domains:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to fetch domains";
-      return NextResponse.json({ error: errorMessage }, { status: 500 });
+      return ApiResponse.serverError(error, "Failed to fetch domains");
     }
   }
 
@@ -133,15 +130,12 @@ export class DomainController {
       // 1. Authentication check
       const session = await getServerSession(authOptions);
       if (!session?.user?.id) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        return ApiResponse.unauthorized();
       }
 
       // 2. Validate domain ID
       if (!domainId || isNaN(Number(domainId))) {
-        return NextResponse.json(
-          { error: "Invalid domain ID" },
-          { status: 400 }
-        );
+        return ApiResponse.validationError("Invalid domain ID");
       }
 
       // 3. Check if domain exists and belongs to the user
@@ -151,10 +145,7 @@ export class DomainController {
       );
 
       if (!userOwnsDomain) {
-        return NextResponse.json(
-          { error: "Domain not found or not owned by user" },
-          { status: 404 }
-        );
+        return ApiResponse.notFound("Domain not found or not owned by user");
       }
 
       // 4. Call the domain lookup service
@@ -165,46 +156,174 @@ export class DomainController {
 
       // 5. Handle different response scenarios
       if (!result.success) {
-        if (result.onCooldown) {
+        if (result.message?.includes("cooldown")) {
           // If the domain is on cooldown, return a 429 status (Too Many Requests)
-          return NextResponse.json(result, { status: 429 });
-        } else {
-          // For other errors, return a 400 status (Bad Request)
           return NextResponse.json(
             {
-              error: result.message || "Failed to lookup domain information",
               success: false,
+              error: result.message || "Domain lookup is on cooldown",
+              onCooldown: true,
             },
-            { status: 400 }
+            { status: 429 }
+          );
+        } else {
+          // For other errors, return a 400 status (Bad Request)
+          return ApiResponse.error(
+            result.message || "Failed to lookup domain information",
+            400
           );
         }
       }
 
       // 6. Return successful response
-      return NextResponse.json(result);
+      return ApiResponse.success(result);
     } catch (error) {
       // 7. Handle unexpected errors
       console.error("Error looking up domain:", error);
       const errorMessage =
-        error instanceof Error ? error.message : "Unknown error";
-      console.error("Error details:", errorMessage);
-
+        error instanceof Error ? error.message : String(error);
+      
       // Check for timeout-related errors
       const isTimeoutError =
         errorMessage.includes("timeout") ||
         errorMessage.includes("FUNCTION_INVOCATION_TIMEOUT");
 
-      return NextResponse.json(
-        {
-          error: isTimeoutError
-            ? "The domain lookup is taking too long. This can happen with some domain registrars. Please try again later."
-            : "Failed to lookup domain information",
-          success: false,
-          details:
-            process.env.NODE_ENV === "development" ? errorMessage : undefined,
-        },
-        { status: isTimeoutError ? 504 : 500 }
+      if (isTimeoutError) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "The domain lookup is taking too long. This can happen with some domain registrars. Please try again later.",
+            details: process.env.NODE_ENV === "development" ? errorMessage : undefined,
+          },
+          { status: 504 }
+        );
+      }
+
+      return ApiResponse.serverError(error, "Failed to lookup domain information");
+    }
+  }
+
+  /**
+   * Delete a domain for the authenticated user
+   * @param domainId ID of the domain to delete
+   */
+  static async deleteDomain(domainId: string) {
+    try {
+      // 1. Authentication check
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return ApiResponse.unauthorized();
+      }
+
+      // 2. Validate domain ID
+      if (!domainId || isNaN(Number(domainId))) {
+        return ApiResponse.validationError("Invalid domain ID");
+      }
+
+      // 3. Check if domain exists and belongs to the user
+      const userOwnsDomain = await DomainService.checkUserOwnsDomain(
+        session.user.id,
+        domainId
       );
+
+      if (!userOwnsDomain) {
+        return ApiResponse.notFound("Domain not found or not owned by user");
+      }
+
+      // 4. Call the domain service to delete the domain
+      await DomainService.deleteDomainForUser(session.user.id, domainId);
+
+      // 5. Return successful response
+      return ApiResponse.success(
+        { domainId },
+        "Domain deleted successfully"
+      );
+    } catch (error) {
+      // 6. Handle unexpected errors
+      console.error("Error deleting domain:", error);
+      return ApiResponse.serverError(error, "Failed to delete domain");
+    }
+  }
+
+  /**
+   * Refresh domain information
+   * @param domainId ID of the domain to refresh
+   */
+  static async refreshDomain(domainId: string) {
+    try {
+      // 1. Authentication check
+      const session = await getServerSession(authOptions);
+      if (!session?.user?.id) {
+        return ApiResponse.unauthorized();
+      }
+
+      // 2. Validate domain ID
+      if (!domainId || isNaN(Number(domainId))) {
+        return ApiResponse.validationError("Invalid domain ID");
+      }
+
+      // 3. Check if domain exists and belongs to the user
+      const userOwnsDomain = await DomainService.checkUserOwnsDomain(
+        session.user.id,
+        domainId
+      );
+
+      if (!userOwnsDomain) {
+        return ApiResponse.notFound("Domain not found or not owned by user");
+      }
+
+      // 4. Call the domain lookup service with force refresh
+      const result = await DomainLookupService.updateDomainInfo(
+        domainId,
+        true // Force refresh
+      );
+
+      // 5. Handle different response scenarios
+      if (!result.success) {
+        if (result.message?.includes("cooldown")) {
+          // If the domain is on cooldown, return a 429 status (Too Many Requests)
+          return NextResponse.json(
+            {
+              success: false,
+              error: result.message || "Domain lookup is on cooldown",
+              onCooldown: true,
+            },
+            { status: 429 }
+          );
+        } else {
+          // For other errors, return a 400 status (Bad Request)
+          return ApiResponse.error(
+            result.message || "Failed to refresh domain information",
+            400
+          );
+        }
+      }
+
+      // 6. Return successful response
+      return ApiResponse.success(result);
+    } catch (error) {
+      // 7. Handle unexpected errors
+      console.error("Error refreshing domain:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      
+      // Check for timeout-related errors
+      const isTimeoutError =
+        errorMessage.includes("timeout") ||
+        errorMessage.includes("FUNCTION_INVOCATION_TIMEOUT");
+
+      if (isTimeoutError) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "The domain refresh is taking too long. This can happen with some domain registrars. Please try again later.",
+            details: process.env.NODE_ENV === "development" ? errorMessage : undefined,
+          },
+          { status: 504 }
+        );
+      }
+
+      return ApiResponse.serverError(error, "Failed to refresh domain");
     }
   }
 }

@@ -104,24 +104,38 @@ export const useDomains = (
         } as DomainResponse;
       }
 
-      // If we're searching, fetch all domains for client-side search
-      // Otherwise, use the paginated API
-      const url = search.trim()
-        ? `/api/domains?limit=1000` // Get all domains for client-side search
-        : `/api/domains?page=${page}&limit=${limit}`;
+      try {
+        // Determine the API endpoint based on whether we're searching or not
+        const endpoint = search.trim()
+          ? "/api/domains" // Get all domains for client-side search
+          : "/api/domains";
 
-      const response = await fetch(url);
+        // Use pagination parameters if not searching
+        const params: Record<string, string> = {};
+        if (!search.trim()) {
+          params.page = page.toString();
+          params.limit = limit.toString();
+        }
 
-      if (!response.ok) {
+        // Make the API call through our standard client - handle new API response format
+        const response = await apiClient.get<{
+          success: boolean;
+          data: DomainResponse;
+        }>(endpoint, { params });
+
+        // The API now returns data wrapped in a response object with { success, data }
+        // We need to extract the data property which contains our DomainResponse
+        return response.data;
+      } catch (error) {
+        console.error("Error fetching domains:", error);
         toast({
           id: "domains-error",
           title: "Error",
           description: "Failed to fetch domains",
           variant: "destructive",
         });
+        throw error;
       }
-
-      return (await response.json()) as DomainResponse;
     },
     staleTime: 1000 * 60 * 5, // 5 minutes
     enabled: !!session?.user,
@@ -149,6 +163,79 @@ export const useDomains = (
  * Hook for adding domains to track
  * Uses optimistic updates and proper query invalidation
  */
+/**
+ * Hook for refreshing domain information
+ * Uses React Query's useMutation for handling the refresh operation
+ */
+export function useRefreshDomain() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  interface DomainRefreshResponse {
+    success: boolean;
+    domain?: Domain;
+    message?: string;
+  }
+
+  // API wrapper response format
+  interface ApiResponse<T> {
+    success: boolean;
+    data: T;
+    message?: string;
+  }
+
+  return useMutation<DomainRefreshResponse, Error, string>({
+    mutationFn: async (domainId: string) => {
+      // Validate input
+      if (!domainId) {
+        throw new Error("No domain ID provided");
+      }
+      // Call the controller via API endpoint - handle the wrapped response format
+      const apiResponse = await apiClient.post<
+        ApiResponse<DomainRefreshResponse>
+      >(`/api/domains/${domainId}/lookup`, { forceRefresh: true });
+
+      // Return the data from the response
+      return apiResponse.data;
+    },
+    onSuccess: (data, domainId) => {
+      // Invalidate queries to trigger refetch
+      queryClient.invalidateQueries({
+        queryKey: domainKeys.lookupById(domainId),
+      });
+      queryClient.invalidateQueries({ queryKey: domainKeys.lists() });
+
+      // Show success toast
+      toast({
+        title: "WHOIS Updated",
+        description: `Domain information refreshed successfully`,
+        id: uuidv4(),
+      });
+    },
+    onError: (error) => {
+      // Handle specific error types
+      let errorMessage = "Failed to refresh domain information";
+      let variant: "default" | "destructive" = "destructive";
+
+      if (error.message.includes("cooldown")) {
+        errorMessage = error.message;
+        variant = "default"; // Use default variant for cooldown (not a critical error)
+      } else {
+        errorMessage = error.message || "Failed to refresh domain information";
+      }
+
+      toast({
+        title: error.message.includes("cooldown")
+          ? "Refresh Cooldown"
+          : "Error",
+        description: errorMessage,
+        variant,
+        id: uuidv4(),
+      });
+    },
+  });
+}
+
 export function useAddDomains() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -237,40 +324,48 @@ export function useAddDomains() {
   });
 }
 
-// Delete domain mutation
+/**
+ * Hook for deleting a domain
+ * Uses proper query invalidation and consistent error handling
+ */
 export function useDeleteDomain() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (domainId: string) => {
-      const response = await fetch(`/api/domains/${domainId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        toast({
-          id: "failed-deleting-domains",
-          title: "Error",
-          description: data.error || "Failed to delete domain",
-          variant: "destructive",
-        });
+      try {
+        // Use the API client for consistent error handling
+        const result = await apiClient.delete<{
+          success: boolean;
+          message: string;
+        }>(`/api/domains/${domainId}`);
+        return { domainId, ...result };
+      } catch (error: unknown) {
+        // Extract error message from the response if available
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : typeof error === "object" &&
+              error !== null &&
+              "response" in error &&
+              error.response
+            ? (error.response as { data?: { error?: string } })?.data?.error
+            : "Failed to delete domain";
+        throw new Error(errorMessage);
       }
-
-      return domainId;
     },
-    onSuccess: (domainId) => {
+    onSuccess: () => {
       // Show success toast
       const id = uuidv4();
       toast({
         id,
         title: "Success",
-        description: `Domain deleted successfully (ID: ${domainId})`,
+        description: `Domain deleted successfully`,
       });
 
       // Invalidate domains query to refresh the list
-      queryClient.invalidateQueries({ queryKey: ["domains"] });
+      queryClient.invalidateQueries({ queryKey: domainKeys.lists() });
     },
     onError: (error: Error) => {
       const id = uuidv4();
@@ -298,16 +393,22 @@ export function useRefreshDomainWhois() {
       domainExpiryDate?: string | null;
     };
     message?: string;
+    success?: boolean;
   }
 
-  return useMutation<DomainLookupResponse, Error, string>({
-    mutationFn: async (domainId: string) => {
+  return useMutation<
+    DomainLookupResponse,
+    Error,
+    { domainId: string; forceRefresh?: boolean }
+  >({
+    mutationFn: async ({ domainId, forceRefresh = false }) => {
       // Use the API client for consistent error handling
       return await apiClient.post<DomainLookupResponse>(
-        `/api/domains/${domainId}/lookup`
+        `/api/domains/${domainId}/lookup`,
+        { forceRefresh }
       );
     },
-    onMutate: async (domainId) => {
+    onMutate: async ({ domainId }) => {
       // Cancel any outgoing refetches to avoid overwriting our optimistic update
       await queryClient.cancelQueries({
         queryKey: domainKeys.detail(domainId),
@@ -323,7 +424,7 @@ export function useRefreshDomainWhois() {
         domainId: string;
       };
     },
-    onSuccess: (data, domainId) => {
+    onSuccess: (data, { domainId }) => {
       // Show success toast
       toast({
         id: uuidv4(),
@@ -337,7 +438,10 @@ export function useRefreshDomainWhois() {
       queryClient.invalidateQueries({ queryKey: domainKeys.detail(domainId) });
       queryClient.invalidateQueries({ queryKey: domainKeys.lists() });
     },
-    onError: (error: Error, domainId: string, context: unknown) => {
+    onError: (error: Error, params, context: unknown) => {
+      // Get domainId from params for error handling and recovery
+      const { domainId } = params;
+
       // Cast the context to the expected type
       const typedContext = context as
         | { previousDomains?: unknown; domainId?: string }
@@ -351,22 +455,25 @@ export function useRefreshDomainWhois() {
         );
       }
 
+      // Invalidate any queries related to this specific domain
+      queryClient.invalidateQueries({ queryKey: domainKeys.detail(domainId) });
+
       // Check if this is a timeout error
-      const isTimeoutError = 
-        error.message?.includes('timeout') || 
-        error.message?.includes('504') || 
-        error.message?.includes('Gateway Timeout');
+      const isTimeoutError =
+        error.message?.includes("timeout") ||
+        error.message?.includes("504") ||
+        error.message?.includes("Gateway Timeout");
 
       toast({
         id: uuidv4(),
         title: isTimeoutError ? "Lookup Timeout" : "Refresh Failed",
-        description: isTimeoutError 
+        description: isTimeoutError
           ? "The domain lookup is taking too long. This can happen with some domain registrars. Please try again later."
           : error.message || "Failed to refresh domain information",
         variant: "destructive",
       });
     },
-    onSettled: (data, error, domainId) => {
+    onSettled: (data, error, { domainId }) => {
       // Always invalidate queries after settled (success or error)
       queryClient.invalidateQueries({ queryKey: domainKeys.detail(domainId) });
     },

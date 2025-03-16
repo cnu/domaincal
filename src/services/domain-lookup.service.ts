@@ -52,13 +52,15 @@ export class DomainLookupService {
     domainName: string
   ): Promise<WhoisCheckResponse> {
     try {
-      // Create a timeout promise that rejects after 5 seconds
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          reject(new Error('Domain registration check timed out after 5 seconds'));
-        }, 5000);
-      });
-      
+      // // Create a timeout promise that rejects after 5 seconds
+      // const timeoutPromise = new Promise<never>((_, reject) => {
+      //   setTimeout(() => {
+      //     reject(
+      //       new Error("Domain registration check timed out after 5 seconds")
+      //     );
+      //   }, 5000);
+      // });
+
       // Create the fetch promise
       const fetchPromise = fetch(
         `${this.API_BASE_URL}/check?domain=${domainName}`,
@@ -72,7 +74,7 @@ export class DomainLookupService {
       );
 
       // Race the fetch against the timeout
-      const response = await Promise.race([fetchPromise, timeoutPromise]);
+      const response = await Promise.race([fetchPromise]);
 
       if (!response.ok) {
         throw new Error(
@@ -100,12 +102,12 @@ export class DomainLookupService {
   ): Promise<WhoisQueryResponse> {
     try {
       // Create a timeout promise that rejects after 8 seconds
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
-          reject(new Error('WHOIS query timed out after 8 seconds'));
-        }, 8000);
-      });
-      
+      // const timeoutPromise = new Promise<never>((_, reject) => {
+      //   setTimeout(() => {
+      //     reject(new Error("WHOIS query timed out after 8 seconds"));
+      //   }, 8000);
+      // });
+
       // Create the fetch promise
       const fetchPromise = fetch(
         `${this.API_BASE_URL}/query?domain=${domainName}`,
@@ -119,7 +121,7 @@ export class DomainLookupService {
       );
 
       // Race the fetch against the timeout
-      const response = await Promise.race([fetchPromise, timeoutPromise]);
+      const response = await Promise.race([fetchPromise]);
 
       if (!response.ok) {
         throw new Error(
@@ -132,15 +134,15 @@ export class DomainLookupService {
       // Debug WHOIS response data
       const result = whoisData.result || whoisData;
 
-      console.log(`WHOIS data for ${domainName}:`, {
-        expiration_date: result.expiration_date,
-        expire_date: result.expire_date,
-        creation_date: result.creation_date,
-        create_date: result.create_date,
-        registrar: result.registrar,
-        emails: result.emails,
-        raw: whoisData,
-      });
+      // console.log(`WHOIS data for ${domainName}:`, {
+      //   expiration_date: result.expiration_date,
+      //   expire_date: result.expire_date,
+      //   creation_date: result.creation_date,
+      //   create_date: result.create_date,
+      //   registrar: result.registrar,
+      //   emails: result.emails,
+      //   raw: whoisData,
+      // });
 
       // Return the result object if it exists, otherwise return the whole response
       return result;
@@ -172,14 +174,17 @@ export class DomainLookupService {
 
       // 2. Validate API key before proceeding
       if (!this.API_KEY) {
-        console.error("WHOIS API key is not configured in environment variables");
+        console.error(
+          "WHOIS API key is not configured in environment variables"
+        );
         return {
           success: false,
-          message: "WHOIS API key is not configured. Please configure the API key in the environment variables.",
+          message:
+            "WHOIS API key is not configured. Please configure the API key in the environment variables.",
           domain: null as unknown as DomainLookupResponse["domain"],
         };
       }
-      
+
       // 3. Fetch the domain to ensure it exists
       let existingDomain;
       try {
@@ -190,11 +195,13 @@ export class DomainLookupService {
         console.error(`Error fetching domain with ID ${domainId}:`, error);
         return {
           success: false,
-          message: `Error fetching domain: ${error instanceof Error ? error.message : "Unknown error"}`,
+          message: `Error fetching domain: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
           domain: null as unknown as DomainLookupResponse["domain"],
         };
       }
-      
+
       if (!existingDomain) {
         return {
           success: false,
@@ -236,14 +243,17 @@ export class DomainLookupService {
       // 5. Check if the domain is registered
       let checkResult;
       try {
-        checkResult = await this.checkDomainRegistration(
-          existingDomain.name
-        );
+        checkResult = await this.checkDomainRegistration(existingDomain.name);
       } catch (error) {
-        console.error(`Error checking domain registration for ${existingDomain.name}:`, error);
+        console.error(
+          `Error checking domain registration for ${existingDomain.name}:`,
+          error
+        );
         return {
           success: false,
-          message: `Failed to check domain registration: ${error instanceof Error ? error.message : "Unknown error"}`,
+          message: `Failed to check domain registration: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
           domain: serializeDomain(existingDomain),
         };
       }
@@ -261,10 +271,15 @@ export class DomainLookupService {
           });
           return { success: true, domain: serializeDomain(domain) };
         } catch (error) {
-          console.error(`Error updating domain status for ${existingDomain.name}:`, error);
+          console.error(
+            `Error updating domain status for ${existingDomain.name}:`,
+            error
+          );
           return {
             success: false,
-            message: `Failed to update domain status: ${error instanceof Error ? error.message : "Unknown error"}`,
+            message: `Failed to update domain status: ${
+              error instanceof Error ? error.message : "Unknown error"
+            }`,
             domain: serializeDomain(existingDomain),
           };
         }
@@ -281,11 +296,11 @@ export class DomainLookupService {
         ? new Date(whoisInfo.expire_date)
         : null;
 
-      console.log(`Update domain info - expiryDate:`, {
-        expiration_date: whoisInfo.expiration_date,
-        expire_date: whoisInfo.expire_date,
-        parsed_date: expiryDate,
-      });
+      // console.log(`Update domain info - expiryDate:`, {
+      //   expiration_date: whoisInfo.expiration_date,
+      //   expire_date: whoisInfo.expire_date,
+      //   parsed_date: expiryDate,
+      // });
 
       const createdDate = whoisInfo.creation_date
         ? new Date(whoisInfo.creation_date)
@@ -339,7 +354,8 @@ export class DomainLookupService {
     } catch (error) {
       console.error(`Error updating domain info for ID ${domainId}:`, error);
       // Return a structured error response instead of throwing
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
       return {
         success: false,
         message: `Failed to update domain information: ${errorMessage}`,
