@@ -111,7 +111,7 @@ export default function Home() {
       <AuthDialog
         isOpen={isAuthOpen}
         onOpenChange={setIsAuthOpen}
-        view={authView}
+        currentView={authView}
         onViewChange={setAuthView}
         onLogin={handleLogin}
         onRegister={handleRegister}
