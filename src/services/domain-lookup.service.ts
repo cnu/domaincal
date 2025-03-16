@@ -52,7 +52,15 @@ export class DomainLookupService {
     domainName: string
   ): Promise<WhoisCheckResponse> {
     try {
-      const response = await fetch(
+      // Create a timeout promise that rejects after 5 seconds
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('Domain registration check timed out after 5 seconds'));
+        }, 5000);
+      });
+      
+      // Create the fetch promise
+      const fetchPromise = fetch(
         `${this.API_BASE_URL}/check?domain=${domainName}`,
         {
           method: "GET",
@@ -62,6 +70,9 @@ export class DomainLookupService {
           redirect: "follow",
         }
       );
+
+      // Race the fetch against the timeout
+      const response = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (!response.ok) {
         throw new Error(
@@ -88,7 +99,15 @@ export class DomainLookupService {
     domainName: string
   ): Promise<WhoisQueryResponse> {
     try {
-      const response = await fetch(
+      // Create a timeout promise that rejects after 8 seconds
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error('WHOIS query timed out after 8 seconds'));
+        }, 8000);
+      });
+      
+      // Create the fetch promise
+      const fetchPromise = fetch(
         `${this.API_BASE_URL}/query?domain=${domainName}`,
         {
           method: "GET",
@@ -98,6 +117,9 @@ export class DomainLookupService {
           redirect: "follow",
         }
       );
+
+      // Race the fetch against the timeout
+      const response = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (!response.ok) {
         throw new Error(

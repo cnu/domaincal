@@ -31,6 +31,98 @@ export class DomainService {
 
     return domains.map(serializeDomain);
   }
+  
+  /**
+   * Get paginated domains for a user
+   * @param userId User ID
+   * @param page Page number (1-based)
+   * @param limit Number of items per page
+   * @returns Paginated domains with metadata
+   */
+  static async getPaginatedDomains(
+    userId: string,
+    page: number,
+    limit: number
+  ): Promise<{
+    domains: DomainResponse[];
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  }> {
+    // Validate pagination parameters
+    const validPage = page > 0 ? page : 1;
+    const validLimit = limit > 0 && limit <= 50 ? limit : 10; // Cap at 50 items per page
+
+    // Calculate skip for pagination
+    const skip = (validPage - 1) * validLimit;
+
+    // Get total count for pagination metadata
+    const totalDomains = await prisma.domain.count({
+      where: {
+        users: {
+          some: {
+            userId: BigInt(userId),
+          },
+        },
+      },
+    });
+
+    // Get paginated domains
+    const domains = await prisma.domain.findMany({
+      where: {
+        users: {
+          some: {
+            userId: BigInt(userId),
+          },
+        },
+      },
+      orderBy: [
+        // Sort by expiry date ascending (closest expiry dates first, nulls last)
+        { domainExpiryDate: "asc" },
+        // Secondary sort by name for domains with no expiry date
+        { name: "asc" },
+      ],
+      skip,
+      take: validLimit,
+    });
+
+    // Calculate total pages
+    const totalPages = Math.ceil(totalDomains / validLimit);
+
+    return {
+      domains: domains.map(serializeDomain),
+      page: validPage,
+      limit: validLimit,
+      total: totalDomains,
+      totalPages,
+    };
+  }
+  
+  /**
+   * Check if a user owns a specific domain
+   * @param userId User ID
+   * @param domainId Domain ID
+   * @returns True if the user owns the domain, false otherwise
+   */
+  static async checkUserOwnsDomain(
+    userId: string,
+    domainId: string
+  ): Promise<boolean> {
+    const userDomain = await prisma.userDomains.findUnique({
+      where: {
+        userId_domainId: {
+          userId: BigInt(userId),
+          domainId: BigInt(domainId),
+        },
+      },
+      include: {
+        domain: true, // Include domain details for validation
+      },
+    });
+
+    return !!userDomain && !!userDomain.domain;
+  }
 
   /**
    * Add a domain for a user
