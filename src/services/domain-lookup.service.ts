@@ -226,7 +226,12 @@ export class DomainLookupService {
           // Calculate time remaining in the cooldown period
           const timeRemaining = cooldownEnds.getTime() - now.getTime();
           const hoursRemaining = Math.ceil(timeRemaining / (60 * 60 * 1000));
-
+          
+          // Create serialized domain with cooldown information
+          const serializedDomain = serializeDomain(domainWithRefresh as PrismaDomain);
+          serializedDomain.onCooldown = true;
+          serializedDomain.cooldownEndsAt = cooldownEnds;
+          
           // Return a structured response instead of throwing an error
           return {
             success: false,
@@ -235,7 +240,7 @@ export class DomainLookupService {
             message: `Domain refresh on cooldown. Please try again in ${hoursRemaining} hour${
               hoursRemaining === 1 ? "" : "s"
             }.`,
-            domain: serializeDomain(domainWithRefresh as PrismaDomain),
+            domain: serializedDomain,
           } as DomainLookupResponse;
         }
       }
