@@ -295,6 +295,12 @@ export class DomainService {
     try {
       console.log(`Fetching WHOIS data in background for ${domainName}`);
 
+      // Verify WHOIS API configuration
+      if (!process.env.WHOIS_API_KEY) {
+        console.error('WHOIS_API_KEY environment variable is not set');
+        return;
+      }
+
       // Check if domain exists
       const domain = await prisma.domain.findUnique({
         where: { id: domainId },

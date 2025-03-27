@@ -67,6 +67,21 @@ export class DomainLookupService {
   private static readonly API_BASE_URL = "https://api.whoisfreaks.com/v1.0";
 
   /**
+   * Validate the WHOIS API key configuration
+   * @throws Error if API key is not properly configured
+   */
+  private static validateApiKey(): void {
+    if (!this.API_KEY || this.API_KEY.length < 32) {
+      console.error("WHOIS API key is not set or appears invalid", {
+        hasKey: !!this.API_KEY,
+        keyLength: this.API_KEY?.length || 0,
+        environment: process.env.NODE_ENV
+      });
+      throw new Error("WHOIS API key is not properly configured");
+    }
+  }
+
+  /**
    * Check if a domain is registered using WHOIS API
    * @param domainName The domain name to check
    * @returns Object with domain and registration status
@@ -75,11 +90,8 @@ export class DomainLookupService {
     domainName: string
   ): Promise<WhoisCheckResponse> {
     try {
-      // Check if API key is missing
-      if (this.API_KEY === "") {
-        console.error("WHOIS API key is not set");
-        throw new Error("WHOIS API key is not configured");
-      }
+      // Validate API key configuration
+      this.validateApiKey();
 
       // Log API request for debugging
       console.log(`Making WHOIS API request for domain: ${domainName}`);
@@ -143,33 +155,49 @@ export class DomainLookupService {
     domainName: string
   ): Promise<WhoisQueryResponse> {
     try {
-      // Check if API key is missing
-      if (this.API_KEY === "") {
-        console.error("WHOIS API key is not set");
-        throw new Error("WHOIS API key is not configured");
-      }
+      // Validate API key configuration
+      this.validateApiKey();
+
+      // Log API configuration
+      console.log('WHOIS API Configuration:', {
+        baseUrl: this.API_BASE_URL,
+        hasApiKey: !!this.API_KEY,
+        apiKeyLength: this.API_KEY?.length || 0
+      });
+
+      // Construct API URL
+      const apiUrl = `${this.API_BASE_URL}/whois?whois=live&domainName=${domainName}&apiKey=${this.API_KEY}`;
+      console.log('Making WHOIS API request for domain:', domainName);
+      console.log('API URL:', apiUrl);
 
       // Make the API call
-      const response = await fetch(
-        `${this.API_BASE_URL}/whois?whois=live&domainName=${domainName}&apiKey=${this.API_KEY}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          } as HeadersInit,
-          redirect: "follow",
-        }
-      );
+      const response = await fetch(apiUrl, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        } as HeadersInit,
+        redirect: "follow",
+      });
 
       console.log(
-        `WHOIS API Response status for ${domainName}:`,
-        response.status
+        `WHOIS API Response for ${domainName}:`,
+        {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries())
+        }
       );
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`WHOIS API error for ${domainName}:`, errorText);
-        throw new Error(`WHOIS API failed with status: ${response.status}`);
+        const errorDetails = {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          body: errorText
+        };
+        console.error(`WHOIS API error for ${domainName}:`, errorDetails);
+        throw new Error(`WHOIS API failed with status ${response.status}: ${errorText}`);
       }
 
       const whoisData = await response.json();

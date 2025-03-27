@@ -59,10 +59,10 @@ export async function GET() {
     // Create a test domain entry
     console.log(`\nCreating test domain entry for: ${testDomain}`);
     try {
-      domain = await prisma.domain.create({
-        data: {
-          name: testDomain,
-        },
+      domain = await prisma.domain.upsert({
+        where: { name: testDomain },
+        create: { name: testDomain },
+        update: {},
       });
       console.log("Created domain:", domain);
     } catch (error) {
