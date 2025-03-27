@@ -7,33 +7,56 @@ interface WhoisCheckResponse {
   result: string; // 'registered' or 'available'
 }
 
-interface WhoisQueryResponse {
+export interface WhoisRegistrar {
+  iana_id?: string;
+  registrar_name?: string;
+  whois_server?: string;
+  website_url?: string;
+  email?: string;
+}
+
+interface WhoisRegistryData {
   domain_name?: string;
-  creation_date?: string;
-  updated_date?: string;
-  expiration_date?: string;
+  query_time?: string;
+  whois_server?: string;
+  domain_registered?: string;
   create_date?: string;
   update_date?: string;
+  expiry_date?: string;
+  domain_registrar?: WhoisRegistrar;
+  name_servers?: string[];
+  domain_status?: string[];
+  dnssec?: string;
+  dnssec_ds_data?: string;
+  whois_raw_registery?: string;
+}
+
+interface WhoisQueryResponse {
+  // Basic domain info
+  domain_name?: string;
+  status?: boolean;
+  query_time?: string;
+  whois_server?: string;
+  domain_registered?: string;
+
+  // Dates
+  creation_date?: string;
+  create_date?: string;
+  updated_date?: string;
+  update_date?: string;
+  expiration_date?: string;
   expire_date?: string;
   domain_age?: number;
-  whois_server?: string;
-  emails?: string;
-  registrar?:
-    | string
-    | {
-        name?: string;
-        url?: string;
-        email?: string;
-      };
-  registrant?: {
-    name?: string;
-    organization?: string;
-    email?: string;
-  };
-  name_servers?: string[];
-  status?: string[] | string;
+
+  // Raw WHOIS data
+  whois_raw_domain?: string;
+  whois_raw_registery?: string;
+
+  // Registry data
+  registry_data?: WhoisRegistryData;
+
   // Additional properties that might be in the response
-  [key: string]: string | number | object | null | undefined;
+  [key: string]: string | number | boolean | object | null | undefined;
 }
 
 /**
@@ -41,7 +64,7 @@ interface WhoisQueryResponse {
  */
 export class DomainLookupService {
   private static readonly API_KEY = process.env.WHOIS_API_KEY || "";
-  private static readonly API_BASE_URL = "https://api.apilayer.com/whois";
+  private static readonly API_BASE_URL = "https://api.whoisfreaks.com/v1.0";
 
   /**
    * Check if a domain is registered using WHOIS API
@@ -52,37 +75,56 @@ export class DomainLookupService {
     domainName: string
   ): Promise<WhoisCheckResponse> {
     try {
-      // // Create a timeout promise that rejects after 5 seconds
-      // const timeoutPromise = new Promise<never>((_, reject) => {
-      //   setTimeout(() => {
-      //     reject(
-      //       new Error("Domain registration check timed out after 5 seconds")
-      //     );
-      //   }, 5000);
-      // });
+      // Check if API key is missing
+      if (this.API_KEY === "") {
+        console.error("WHOIS API key is not set");
+        throw new Error("WHOIS API key is not configured");
+      }
 
-      // Create the fetch promise
-      const fetchPromise = fetch(
-        `${this.API_BASE_URL}/check?domain=${domainName}`,
+      // Log API request for debugging
+      console.log(`Making WHOIS API request for domain: ${domainName}`);
+      console.log(
+        `API URL: ${this.API_BASE_URL}/whois?whois=live&domainName=${domainName}`
+      );
+
+      // Make the API call
+      const response = await fetch(
+        `${this.API_BASE_URL}/whois?whois=live&domainName=${domainName}&apiKey=${this.API_KEY}`,
         {
           method: "GET",
           headers: {
-            apikey: this.API_KEY,
+            "Content-Type": "application/json",
           } as HeadersInit,
           redirect: "follow",
         }
       );
 
-      // Race the fetch against the timeout
-      const response = await Promise.race([fetchPromise]);
-
       if (!response.ok) {
+        console.error(
+          `WHOIS API error: ${response.status} ${response.statusText}`
+        );
+        const errorText = await response.text();
+        console.error("WHOIS API response:", errorText);
         throw new Error(
           `WHOIS API check failed with status: ${response.status}`
         );
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log("Raw WHOIS API response:", JSON.stringify(data, null, 2));
+
+      if (!data || typeof data !== 'object') {
+        throw new Error(`Invalid WHOIS API response for ${domainName}: ${JSON.stringify(data)}`);
+      }
+
+      // Check if the response indicates a registered domain
+      const isRegistered =
+        data.domain_registered === true || data.status === true;
+
+      return {
+        domain: domainName,
+        result: isRegistered ? "registered" : "available",
+      };
     } catch (error) {
       console.error(
         `Error checking domain registration for ${domainName}:`,
@@ -101,51 +143,93 @@ export class DomainLookupService {
     domainName: string
   ): Promise<WhoisQueryResponse> {
     try {
-      // Create a timeout promise that rejects after 8 seconds
-      // const timeoutPromise = new Promise<never>((_, reject) => {
-      //   setTimeout(() => {
-      //     reject(new Error("WHOIS query timed out after 8 seconds"));
-      //   }, 8000);
-      // });
+      // Check if API key is missing
+      if (this.API_KEY === "") {
+        console.error("WHOIS API key is not set");
+        throw new Error("WHOIS API key is not configured");
+      }
 
-      // Create the fetch promise
-      const fetchPromise = fetch(
-        `${this.API_BASE_URL}/query?domain=${domainName}`,
+      // Make the API call
+      const response = await fetch(
+        `${this.API_BASE_URL}/whois?whois=live&domainName=${domainName}&apiKey=${this.API_KEY}`,
         {
           method: "GET",
           headers: {
-            apikey: this.API_KEY,
+            "Content-Type": "application/json",
           } as HeadersInit,
           redirect: "follow",
         }
       );
 
-      // Race the fetch against the timeout
-      const response = await Promise.race([fetchPromise]);
+      console.log(
+        `WHOIS API Response status for ${domainName}:`,
+        response.status
+      );
 
       if (!response.ok) {
-        throw new Error(
-          `WHOIS API query failed with status: ${response.status}`
-        );
+        const errorText = await response.text();
+        console.error(`WHOIS API error for ${domainName}:`, errorText);
+        throw new Error(`WHOIS API failed with status: ${response.status}`);
       }
 
       const whoisData = await response.json();
+      console.log(
+        `WHOIS API data for ${domainName}:`,
+        JSON.stringify(whoisData, null, 2)
+      );
 
-      // Debug WHOIS response data
-      const result = whoisData.result || whoisData;
+      if (!whoisData || typeof whoisData !== 'object') {
+        throw new Error(`Invalid WHOIS API response for ${domainName}: ${JSON.stringify(whoisData)}`);
+      }
 
-      // console.log(`WHOIS data for ${domainName}:`, {
-      //   expiration_date: result.expiration_date,
-      //   expire_date: result.expire_date,
-      //   creation_date: result.creation_date,
-      //   create_date: result.create_date,
-      //   registrar: result.registrar,
-      //   emails: result.emails,
-      //   raw: whoisData,
-      // });
+      // Helper function to parse date strings
+      const parseDate = (dateStr?: string): Date | null => {
+        if (!dateStr) return null;
+        try {
+          const date = new Date(dateStr);
+          return isNaN(date.getTime()) ? null : date;
+        } catch {
+          return null;
+        }
+      };
 
-      // Return the result object if it exists, otherwise return the whole response
-      return result;
+      // Extract registrar info
+      const registrarInfo = whoisData.domain_registrar || {};
+
+      // Create normalized response
+      const normalizedResponse: WhoisQueryResponse = {
+        domain_name: whoisData.domain_name,
+        status: whoisData.status === true || whoisData.domain_registered === true || whoisData.domain_registered === "yes",
+        query_time: whoisData.query_time,
+        whois_server: whoisData.whois_server,
+        domain_registered: (whoisData.status === true || whoisData.domain_registered === true || whoisData.domain_registered === "yes") ? "yes" : "no",
+        create_date: parseDate(whoisData.create_date)?.toISOString(),
+        update_date: parseDate(whoisData.update_date)?.toISOString(),
+        expiry_date: parseDate(whoisData.expiry_date)?.toISOString(),
+        domain_registrar: {
+          iana_id: registrarInfo.iana_id,
+          registrar_name: registrarInfo.registrar_name,
+          whois_server: registrarInfo.whois_server,
+          website_url: registrarInfo.website_url,
+          email: registrarInfo.email,
+        },
+        name_servers: Array.isArray(whoisData.name_servers)
+          ? whoisData.name_servers.filter(Boolean)
+          : [],
+        domain_status: Array.isArray(whoisData.domain_status)
+          ? whoisData.domain_status
+          : [],
+        whois_raw_domain: whoisData.whois_raw_domain,
+      };
+
+      console.log(`Normalized WHOIS data for ${domainName}:`, {
+        expiry_date: normalizedResponse.expiry_date,
+        create_date: normalizedResponse.create_date,
+        update_date: normalizedResponse.update_date,
+        registrar: normalizedResponse.domain_registrar,
+      });
+
+      return normalizedResponse;
     } catch (error) {
       console.error(`Error getting WHOIS info for ${domainName}:`, error);
       throw error;
@@ -226,12 +310,14 @@ export class DomainLookupService {
           // Calculate time remaining in the cooldown period
           const timeRemaining = cooldownEnds.getTime() - now.getTime();
           const hoursRemaining = Math.ceil(timeRemaining / (60 * 60 * 1000));
-          
+
           // Create serialized domain with cooldown information
-          const serializedDomain = serializeDomain(domainWithRefresh as PrismaDomain);
+          const serializedDomain = serializeDomain(
+            domainWithRefresh as PrismaDomain
+          );
           serializedDomain.onCooldown = true;
           serializedDomain.cooldownEndsAt = cooldownEnds;
-          
+
           // Return a structured response instead of throwing an error
           return {
             success: false,
@@ -293,69 +379,71 @@ export class DomainLookupService {
       // Get detailed WHOIS information
       const whoisInfo = await this.getDetailedWhoisInfo(existingDomain.name);
 
-      // Parse dates from WHOIS response - handle different API response formats
-      // The result is already extracted in getDetailedWhoisInfo
-      const expiryDate = whoisInfo.expiration_date
-        ? new Date(whoisInfo.expiration_date)
-        : whoisInfo.expire_date
-        ? new Date(whoisInfo.expire_date)
-        : null;
+      // Extract registry data and registrar information
+      const registryData = whoisInfo.registry_data || ({} as WhoisRegistryData);
+      const registrar = registryData.domain_registrar || ({} as WhoisRegistrar);
 
-      // console.log(`Update domain info - expiryDate:`, {
-      //   expiration_date: whoisInfo.expiration_date,
-      //   expire_date: whoisInfo.expire_date,
-      //   parsed_date: expiryDate,
-      // });
+      // Prepare update data with correct types
+      const updateData = {
+        // Store the complete response
+        response: whoisInfo,
 
-      const createdDate = whoisInfo.creation_date
-        ? new Date(whoisInfo.creation_date)
-        : whoisInfo.create_date
-        ? new Date(whoisInfo.create_date)
-        : null;
+        // Basic domain info
+        domainRegistered: 
+            (typeof whoisInfo.status === "boolean" && whoisInfo.status === true) || 
+            (typeof whoisInfo.domain_registered === "boolean" && whoisInfo.domain_registered === true) || 
+            (registryData.domain_registered !== undefined && (
+              (typeof registryData.domain_registered === "string" && registryData.domain_registered.toLowerCase() === "yes") || 
+              (typeof registryData.domain_registered === "boolean" && registryData.domain_registered === true)
+            )),
+        whoisServer: registryData.whois_server || whoisInfo.whois_server || null,
+        queryTime: registryData.query_time
+          ? new Date(registryData.query_time)
+          : whoisInfo.query_time
+          ? new Date(whoisInfo.query_time)
+          : null,
 
-      // Extract registrar information - handle different formats
-      let registrar = null;
-      if (typeof whoisInfo.registrar === "string") {
-        registrar = whoisInfo.registrar;
-      } else if (
-        whoisInfo.registrar &&
-        typeof whoisInfo.registrar === "object"
-      ) {
-        registrar = whoisInfo.registrar.name || null;
-      }
+        // Dates
+        domainCreatedDate: registryData.create_date
+          ? new Date(registryData.create_date)
+          : null,
+        domainUpdatedDate: registryData.update_date
+          ? new Date(registryData.update_date)
+          : null,
+        domainExpiryDate: registryData.expiry_date
+          ? new Date(registryData.expiry_date)
+          : null,
 
-      // Extract email information - handle different formats
-      let emails = whoisInfo.emails || null;
-      if (
-        !emails &&
-        whoisInfo.registrant &&
-        typeof whoisInfo.registrant === "object"
-      ) {
-        emails = whoisInfo.registrant.email || null;
-      }
-      if (
-        !emails &&
-        whoisInfo.registrar &&
-        typeof whoisInfo.registrar === "object"
-      ) {
-        emails = whoisInfo.registrar.email || null;
-      }
+        // Registrar information
+        registrarIanaId: registrar.iana_id || null,
+        registrarName: registrar.registrar_name || null,
+        registrarWhoisServer: registrar.whois_server || null,
+        registrarUrl: registrar.website_url || null,
 
-      // Update the domain with the fetched information
-      const domain = await prisma.domain.update({
+        // Domain status and servers
+        nameServers: registryData.name_servers || [],
+        domainStatuses: registryData.domain_status || [],
+        dnssecStatus: registryData.dnssec || null,
+        dnssecDsData: registryData.dnssec_ds_data || null,
+
+        // Raw WHOIS data
+        whoisRawDomain: whoisInfo.whois_raw_domain || null,
+        whoisRawRegistry: registryData.whois_raw_registery || null,
+
+        // Update refresh timestamp
+        lastRefreshedAt: new Date(),
+      };
+
+      // Update domain information in the database with normalized data
+      const updatedDomain = await prisma.domain.update({
         where: { id: BigInt(domainId) },
-        data: {
-          domainExpiryDate: expiryDate,
-          domainCreatedDate: createdDate,
-          domainUpdatedDate: new Date(),
-          ...({ lastRefreshedAt: new Date() } as { lastRefreshedAt: Date }),
-          registrar,
-          emails,
-          response: JSON.parse(JSON.stringify(whoisInfo)),
-        },
+        data: updateData,
       });
 
-      return { success: true, domain: serializeDomain(domain) };
+      return {
+        success: true,
+        domain: serializeDomain(updatedDomain),
+      };
     } catch (error) {
       console.error(`Error updating domain info for ID ${domainId}:`, error);
       // Return a structured error response instead of throwing
