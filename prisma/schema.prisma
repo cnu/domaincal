@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,29 +8,53 @@ datasource db {
 }
 
 model User {
-  id          BigInt   @id @default(autoincrement())
-  email       String   @unique
+  id          BigInt        @id @default(autoincrement())
+  email       String        @unique
   password    String
   lastLoginAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime? @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime?     @updatedAt
   domains     UserDomains[]
 
   @@index([email])
 }
 
 model Domain {
-  id                BigInt   @id @default(autoincrement())
-  name              String   @unique
-  response          Json?
-  domainExpiryDate  DateTime?
+  id                BigInt        @id @default(autoincrement())
+  name              String        @unique
+  // Basic domain info
+  domainRegistered  Boolean       @default(false)
+  whoisServer      String?
+  queryTime        DateTime?
+  
+  // Dates
   domainCreatedDate DateTime?
   domainUpdatedDate DateTime?
-  lastRefreshedAt   DateTime?
-  registrar         String?
-  emails           String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  domainExpiryDate  DateTime?
+  
+  // Registrar information
+  registrarIanaId  String?
+  registrarName    String?
+  registrarWhoisServer String?
+  registrarUrl     String?
+  
+  // Domain status and servers
+  nameServers      String[]      @default([])
+  domainStatuses   String[]      @default([])
+  dnssecStatus     String?
+  dnssecDsData     String?
+  
+  // Raw data
+  whoisRawDomain   String?
+  whoisRawRegistry String?
+  response         Json?
+  
+  // Metadata
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  lastRefreshedAt  DateTime?
+  
+  // Relations
   users            UserDomains[]
 
   @@index([name])
@@ -47,8 +65,8 @@ model UserDomains {
   userId    BigInt
   domainId  BigInt
   createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   domain    Domain   @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, domainId])
   @@index([userId])
