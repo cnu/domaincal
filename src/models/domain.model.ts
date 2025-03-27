@@ -9,8 +9,7 @@ export interface DomainModel {
   domainCreatedDate: Date | null;
   domainUpdatedDate: Date | null;
   lastRefreshedAt: Date | null;
-  registrar: string | null;
-  emails: string | null;
+  registrarName: string | null;
   response: JsonValue | null;
   createdAt: Date;
   updatedAt: Date | null;
@@ -23,8 +22,7 @@ export interface DomainResponse {
   domainCreatedDate: Date | null;
   domainUpdatedDate: Date | null;
   lastRefreshedAt: Date | null;
-  registrar: string | null;
-  emails: string | null;
+  registrarName: string | null;
   response: JsonValue | null;
   createdAt: Date;
   updatedAt: Date | null;
@@ -67,8 +65,7 @@ export const serializeDomain = (domain: PrismaDomain): DomainResponse => {
     domainCreatedDate: domain.domainCreatedDate,
     domainUpdatedDate: domain.domainUpdatedDate,
     lastRefreshedAt,
-    registrar: domain.registrar,
-    emails: domain.emails,
+    registrarName: domain.registrarName,
     response: domain.response,
     createdAt: domain.createdAt,
     updatedAt: domain.updatedAt,
