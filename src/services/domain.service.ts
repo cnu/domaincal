@@ -157,7 +157,7 @@ export class DomainService {
         whoisRawRegistry: null,
         response: null,
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
       };
 
       // Return a serialized domain with error indication
@@ -297,7 +297,7 @@ export class DomainService {
 
       // Verify WHOIS API configuration
       if (!process.env.WHOIS_API_KEY) {
-        console.error('WHOIS_API_KEY environment variable is not set');
+        console.error("WHOIS_API_KEY environment variable is not set");
         return;
       }
 
@@ -317,7 +317,10 @@ export class DomainService {
       );
 
       if (!checkResult || !checkResult.result) {
-        console.error(`Invalid response from WHOIS API for ${domainName}:`, checkResult);
+        console.error(
+          `Invalid response from WHOIS API for ${domainName}:`,
+          checkResult
+        );
         return;
       }
 
@@ -341,12 +344,15 @@ export class DomainService {
         // Parse dates from WHOIS response
         const domainExpiryDate = parseDate(whoisInfo.expiry_date as string);
         const domainCreatedDate = parseDate(whoisInfo.create_date as string);
-        const domainUpdatedDate = parseDate(whoisInfo.update_date as string) || new Date();
+        const domainUpdatedDate =
+          parseDate(whoisInfo.update_date as string) || new Date();
 
         // Extract registrar information
-        const registrarInfo = typeof whoisInfo.domain_registrar === 'object' && whoisInfo.domain_registrar !== null
-          ? whoisInfo.domain_registrar as WhoisRegistrar
-          : {};
+        const registrarInfo =
+          typeof whoisInfo.domain_registrar === "object" &&
+          whoisInfo.domain_registrar !== null
+            ? (whoisInfo.domain_registrar as WhoisRegistrar)
+            : {};
         const registrar = registrarInfo.registrar_name || null;
 
         // Log the data we're about to save
@@ -367,10 +373,29 @@ export class DomainService {
             domainCreatedDate,
             domainUpdatedDate,
             // Registrar information
-            registrarIanaId: typeof whoisInfo.domain_registrar === 'object' && whoisInfo.domain_registrar ? (whoisInfo.domain_registrar as WhoisRegistrar).iana_id || null : null,
-            registrarName: typeof whoisInfo.domain_registrar === 'object' && whoisInfo.domain_registrar ? (whoisInfo.domain_registrar as WhoisRegistrar).registrar_name || null : null,
-            registrarWhoisServer: typeof whoisInfo.domain_registrar === 'object' && whoisInfo.domain_registrar ? (whoisInfo.domain_registrar as WhoisRegistrar).whois_server || null : null,
-            registrarUrl: typeof whoisInfo.domain_registrar === 'object' && whoisInfo.domain_registrar ? (whoisInfo.domain_registrar as WhoisRegistrar).website_url || null : null,
+            registrarIanaId:
+              typeof whoisInfo.domain_registrar === "object" &&
+              whoisInfo.domain_registrar
+                ? (whoisInfo.domain_registrar as WhoisRegistrar).iana_id || null
+                : null,
+            registrarName:
+              typeof whoisInfo.domain_registrar === "object" &&
+              whoisInfo.domain_registrar
+                ? (whoisInfo.domain_registrar as WhoisRegistrar)
+                    .registrar_name || null
+                : null,
+            registrarWhoisServer:
+              typeof whoisInfo.domain_registrar === "object" &&
+              whoisInfo.domain_registrar
+                ? (whoisInfo.domain_registrar as WhoisRegistrar).whois_server ||
+                  null
+                : null,
+            registrarUrl:
+              typeof whoisInfo.domain_registrar === "object" &&
+              whoisInfo.domain_registrar
+                ? (whoisInfo.domain_registrar as WhoisRegistrar).website_url ||
+                  null
+                : null,
             response: whoisInfo,
             lastRefreshedAt: new Date(),
           },
@@ -386,7 +411,7 @@ export class DomainService {
             name: updatedDomain.registrarName,
             ianaId: updatedDomain.registrarIanaId,
             whoisServer: updatedDomain.registrarWhoisServer,
-            url: updatedDomain.registrarUrl
+            url: updatedDomain.registrarUrl,
           },
         });
       } else {
@@ -397,7 +422,7 @@ export class DomainService {
             domainUpdatedDate: new Date(),
             lastRefreshedAt: new Date(),
 
-            response: { status: checkResult.result }
+            response: { status: checkResult.result },
           },
         });
 
@@ -413,11 +438,16 @@ export class DomainService {
             domainUpdatedDate: new Date(),
             lastRefreshedAt: new Date(),
 
-            response: { error: error instanceof Error ? error.message : 'Unknown error' }
+            response: {
+              error: error instanceof Error ? error.message : "Unknown error",
+            },
           },
         });
       } catch (dbError) {
-        console.error(`Failed to update domain ${domainId} with error status:`, dbError);
+        console.error(
+          `Failed to update domain ${domainId} with error status:`,
+          dbError
+        );
       }
     }
   }
