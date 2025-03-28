@@ -311,98 +311,62 @@ export class DomainService {
         return;
       }
 
-      // Check domain registration status with WHOIS API
-      const checkResult = await DomainLookupService.checkDomainRegistration(
-        domainName
-      );
+      // Get WHOIS information
+      const whoisInfo = await DomainLookupService.getDetailedWhoisInfo(domain.name);
+      const isRegistered = whoisInfo.status === true || whoisInfo.domain_registered === 'yes';
 
-      if (!checkResult || !checkResult.result) {
-        console.error(`Invalid response from WHOIS API for ${domainName}:`, checkResult);
-        return;
-      }
+      // Helper function to parse date strings
+      const parseDate = (dateStr?: string | null): Date | null => {
+        if (!dateStr) return null;
+        try {
+          const date = new Date(dateStr);
+          return isNaN(date.getTime()) ? null : date;
+        } catch {
+          return null;
+        }
+      };
 
-      if (checkResult.result === "registered") {
-        // Get detailed WHOIS information
-        const whoisInfo = await DomainLookupService.getDetailedWhoisInfo(
-          domainName
-        );
+      // Parse dates from WHOIS response
+      const domainExpiryDate = parseDate(whoisInfo.expiry_date as string);
+      const domainCreatedDate = parseDate(whoisInfo.create_date as string);
 
-        // Helper function to parse date strings
-        const parseDate = (dateStr?: string | null): Date | null => {
-          if (!dateStr) return null;
-          try {
-            const date = new Date(dateStr);
-            return isNaN(date.getTime()) ? null : date;
-          } catch {
-            return null;
-          }
-        };
+      // Extract registrar information
+      const registrarInfo = typeof whoisInfo.domain_registrar === 'object' && whoisInfo.domain_registrar !== null
+        ? whoisInfo.domain_registrar as WhoisRegistrar
+        : {};
+      const registrarName = registrarInfo.registrar_name || null;
 
-        // Parse dates from WHOIS response
-        const domainExpiryDate = parseDate(whoisInfo.expiry_date as string);
-        const domainCreatedDate = parseDate(whoisInfo.create_date as string);
-        const domainUpdatedDate = parseDate(whoisInfo.update_date as string) || new Date();
+      // Log the data we're about to save
+      console.log(`Updating domain ${domainName} with WHOIS data:`, {
+        domainRegistered: isRegistered,
+        domainCreatedDate,
+        domainExpiryDate,
+        registrarName,
+      });
 
-        // Extract registrar information
-        const registrarInfo = typeof whoisInfo.domain_registrar === 'object' && whoisInfo.domain_registrar !== null
-          ? whoisInfo.domain_registrar as WhoisRegistrar
-          : {};
-        const registrar = registrarInfo.registrar_name || null;
-
-        // Log the data we're about to save
-        console.log(`Updating domain ${domainName} with WHOIS data:`, {
-          domainExpiryDate,
+      // Update domain in database
+      const updatedDomain = await prisma.domain.update({
+        where: { id: domainId },
+        data: {
+          domainRegistered: isRegistered,
           domainCreatedDate,
-          domainUpdatedDate,
-          registrar,
-          registrarInfo,
-          rawResponse: whoisInfo,
-        });
+          domainExpiryDate,
+          lastRefreshedAt: new Date(),
+          registrarName,
+          nameServers: Array.isArray(whoisInfo?.name_servers) ? whoisInfo.name_servers.filter(Boolean) : [],
+          response: whoisInfo || null,
+        },
+      });
 
-        // Update the domain with WHOIS data
-        const updatedDomain = await prisma.domain.update({
-          where: { id: domainId },
-          data: {
-            domainExpiryDate,
-            domainCreatedDate,
-            domainUpdatedDate,
-            // Registrar information
-            registrarIanaId: typeof whoisInfo.domain_registrar === 'object' && whoisInfo.domain_registrar ? (whoisInfo.domain_registrar as WhoisRegistrar).iana_id || null : null,
-            registrarName: typeof whoisInfo.domain_registrar === 'object' && whoisInfo.domain_registrar ? (whoisInfo.domain_registrar as WhoisRegistrar).registrar_name || null : null,
-            registrarWhoisServer: typeof whoisInfo.domain_registrar === 'object' && whoisInfo.domain_registrar ? (whoisInfo.domain_registrar as WhoisRegistrar).whois_server || null : null,
-            registrarUrl: typeof whoisInfo.domain_registrar === 'object' && whoisInfo.domain_registrar ? (whoisInfo.domain_registrar as WhoisRegistrar).website_url || null : null,
-            response: whoisInfo,
-            lastRefreshedAt: new Date(),
-          },
-        });
-
-        console.log(`Successfully updated WHOIS data for ${domainName}:`, {
-          id: updatedDomain.id,
-          name: updatedDomain.name,
-          domainExpiryDate: updatedDomain.domainExpiryDate,
-          domainCreatedDate: updatedDomain.domainCreatedDate,
-          domainUpdatedDate: updatedDomain.domainUpdatedDate,
-          registrarInfo: {
-            name: updatedDomain.registrarName,
-            ianaId: updatedDomain.registrarIanaId,
-            whoisServer: updatedDomain.registrarWhoisServer,
-            url: updatedDomain.registrarUrl
-          },
-        });
-      } else {
-        // Update domain with just the status information
-        await prisma.domain.update({
-          where: { id: domainId },
-          data: {
-            domainUpdatedDate: new Date(),
-            lastRefreshedAt: new Date(),
-
-            response: { status: checkResult.result }
-          },
-        });
-
-        // console.log(`Domain ${domainName} is not registered`);
-      }
+      console.log(`Successfully updated WHOIS data for ${domainName}:`, {
+        id: updatedDomain.id,
+        name: updatedDomain.name,
+        domainRegistered: updatedDomain.domainRegistered,
+        domainCreatedDate: updatedDomain.domainCreatedDate,
+        domainExpiryDate: updatedDomain.domainExpiryDate,
+        registrarName: updatedDomain.registrarName,
+        nameServers: updatedDomain.nameServers,
+      });
     } catch (error) {
       console.error(`Error fetching WHOIS data for ${domainName}:`, error);
       // Update domain with error status

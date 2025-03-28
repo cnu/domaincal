@@ -2,11 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { DomainLookupResponse, serializeDomain } from "@/models/domain.model";
 import { Domain as PrismaDomain } from "@prisma/client";
 
-interface WhoisCheckResponse {
-  domain: string;
-  result: string; // 'registered' or 'available'
-}
-
 export interface WhoisRegistrar {
   iana_id?: string;
   registrar_name?: string;
@@ -81,70 +76,7 @@ export class DomainLookupService {
     }
   }
 
-  /**
-   * Check if a domain is registered using WHOIS API
-   * @param domainName The domain name to check
-   * @returns Object with domain and registration status
-   */
-  static async checkDomainRegistration(
-    domainName: string
-  ): Promise<WhoisCheckResponse> {
-    try {
-      // Validate API key configuration
-      this.validateApiKey();
 
-      // Log API request for debugging
-      console.log(`Making WHOIS API request for domain: ${domainName}`);
-      console.log(
-        `API URL: ${this.API_BASE_URL}/whois?whois=live&domainName=${domainName}`
-      );
-
-      // Make the API call
-      const response = await fetch(
-        `${this.API_BASE_URL}/whois?whois=live&domainName=${domainName}&apiKey=${this.API_KEY}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          } as HeadersInit,
-          redirect: "follow",
-        }
-      );
-
-      if (!response.ok) {
-        console.error(
-          `WHOIS API error: ${response.status} ${response.statusText}`
-        );
-        const errorText = await response.text();
-        console.error("WHOIS API response:", errorText);
-        throw new Error(
-          `WHOIS API check failed with status: ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-      console.log("Raw WHOIS API response:", JSON.stringify(data, null, 2));
-
-      if (!data || typeof data !== 'object') {
-        throw new Error(`Invalid WHOIS API response for ${domainName}: ${JSON.stringify(data)}`);
-      }
-
-      // Check if the response indicates a registered domain
-      const isRegistered =
-        data.domain_registered === true || data.status === true;
-
-      return {
-        domain: domainName,
-        result: isRegistered ? "registered" : "available",
-      };
-    } catch (error) {
-      console.error(
-        `Error checking domain registration for ${domainName}:`,
-        error
-      );
-      throw error;
-    }
-  }
 
   /**
    * Get detailed WHOIS information for a domain
@@ -297,7 +229,7 @@ export class DomainLookupService {
         };
       }
 
-      // 3. Fetch the domain to ensure it exists
+      // 3. Fetch the domain to ensure it exists and check refresh cooldown
       let existingDomain;
       try {
         existingDomain = await prisma.domain.findUnique({
@@ -359,33 +291,35 @@ export class DomainLookupService {
         }
       }
 
-      // 5. Check if the domain is registered
-      let checkResult;
+      // 5. Get WHOIS information for the domain
+      let whoisInfo;
       try {
-        checkResult = await this.checkDomainRegistration(existingDomain.name);
+        whoisInfo = await this.getDetailedWhoisInfo(existingDomain.name);
       } catch (error) {
         console.error(
-          `Error checking domain registration for ${existingDomain.name}:`,
+          `Error fetching WHOIS data for ${existingDomain.name}:`,
           error
         );
         return {
           success: false,
-          message: `Failed to check domain registration: ${
+          message: `Failed to fetch WHOIS data: ${
             error instanceof Error ? error.message : "Unknown error"
           }`,
           domain: serializeDomain(existingDomain),
         };
       }
 
-      if (checkResult.result !== "registered") {
+      // Check if domain is registered based on WHOIS response
+      const isRegistered = whoisInfo.status === true || whoisInfo.domain_registered === 'yes';
+      if (!isRegistered) {
         // Update domain with registration status only
         try {
           const domain = await prisma.domain.update({
             where: { id: BigInt(domainId) },
             data: {
-              domainUpdatedDate: new Date(),
-              response: { status: checkResult.result },
-              ...({ lastRefreshedAt: new Date() } as { lastRefreshedAt: Date }),
+              domainRegistered: false,
+              lastRefreshedAt: new Date(),
+              response: whoisInfo,
             },
           });
           return { success: true, domain: serializeDomain(domain) };
@@ -403,9 +337,6 @@ export class DomainLookupService {
           };
         }
       }
-
-      // Get detailed WHOIS information
-      const whoisInfo = await this.getDetailedWhoisInfo(existingDomain.name);
 
       // Extract registry data and registrar information
       const registryData = whoisInfo.registry_data || ({} as WhoisRegistryData);
