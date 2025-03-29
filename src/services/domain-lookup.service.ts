@@ -455,27 +455,63 @@ export class DomainLookupService {
       const registryData = whoisInfo.registry_data || ({} as WhoisRegistryData);
       const registrar = registryData.domain_registrar || ({} as WhoisRegistrar);
 
+      // Helper function to get the first valid date from multiple possible fields
+      const getFirstValidDate = (...dateStrings: (string | number | boolean | object | null | undefined)[]) => {
+        for (const dateStr of dateStrings) {
+          if (!dateStr) continue;
+          
+          let dateValue: string;
+          if (typeof dateStr === 'string') {
+            dateValue = dateStr;
+          } else if (typeof dateStr === 'number') {
+            dateValue = dateStr.toString();
+          } else if (dateStr && typeof dateStr === 'object' && 'toString' in dateStr) {
+            dateValue = dateStr.toString();
+          } else {
+            continue;
+          }
+
+          try {
+            const date = new Date(dateValue);
+            if (!isNaN(date.getTime())) {
+              return date;
+            }
+          } catch {
+            // Skip invalid date strings
+            continue;
+          }
+        }
+        return null;
+      };
+
       // Prepare update data with correct types
       const updateData = {
         // Store the complete response
         whoisResponse: whoisInfo,
 
         // Registrar information
-        registrar: registrar.registrar_name || null,
+        registrar: registrar.registrar_name || undefined,
 
         // Email information
-        emails: registrar.email || null,
+        emails: registrar.email || undefined,
 
-        // Dates
-        domainCreatedDate: registryData.create_date
-          ? new Date(registryData.create_date)
-          : null,
-        domainUpdatedDate: registryData.update_date
-          ? new Date(registryData.update_date)
-          : null,
-        domainExpiryDate: registryData.expiry_date
-          ? new Date(registryData.expiry_date)
-          : null,
+        // Dates - check all possible date fields
+        domainCreatedDate: getFirstValidDate(
+          registryData.create_date,
+          whoisInfo.create_date,
+          whoisInfo.creation_date
+        ),
+        domainUpdatedDate: getFirstValidDate(
+          registryData.update_date,
+          whoisInfo.update_date,
+          whoisInfo.updated_date
+        ),
+        domainExpiryDate: getFirstValidDate(
+          registryData.expiry_date,
+          whoisInfo.expiry_date,
+          whoisInfo.expiration_date,
+          whoisInfo.expire_date
+        ),
 
         // Update refresh timestamp
         lastRefreshedAt: new Date(),
