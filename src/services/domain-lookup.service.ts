@@ -312,9 +312,8 @@ export class DomainLookupService {
         console.error(`Error fetching domain with ID ${domainId}:`, error);
         return {
           success: false,
-          message: `Error fetching domain: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`,
+          message: `Error fetching domain: ${error instanceof Error ? error.message : "Unknown error"
+            }`,
           domain: {
             id: domainId,
             name: 'Unknown',
@@ -364,8 +363,8 @@ export class DomainLookupService {
       if (!forceRefresh && domainWithRefresh.lastRefreshedAt) {
         const lastRefreshed = new Date(domainWithRefresh.lastRefreshedAt);
         // Use shorter cooldown if there's no WHOIS response or if the last attempt failed
-        const hasSuccessfulWhoisResponse = domainWithRefresh.whoisResponse && 
-          Object.keys(domainWithRefresh.whoisResponse).length > 0 && 
+        const hasSuccessfulWhoisResponse = domainWithRefresh.whoisResponse &&
+          Object.keys(domainWithRefresh.whoisResponse).length > 0 &&
           typeof domainWithRefresh.whoisResponse === 'object' &&
           !('error' in domainWithRefresh.whoisResponse);
         const cooldownPeriod = hasSuccessfulWhoisResponse
@@ -378,7 +377,7 @@ export class DomainLookupService {
           // Calculate time remaining in the cooldown period
           const timeRemaining = cooldownEnds.getTime() - now.getTime();
           const hasWhoisResponse = domainWithRefresh.whoisResponse && Object.keys(domainWithRefresh.whoisResponse).length > 0;
-          
+
           let timeMessage: string;
           if (hasWhoisResponse) {
             const hoursRemaining = Math.ceil(timeRemaining / (60 * 60 * 1000));
@@ -417,9 +416,8 @@ export class DomainLookupService {
         );
         return {
           success: false,
-          message: `Failed to fetch WHOIS data: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`,
+          message: `Failed to fetch WHOIS data: ${error instanceof Error ? error.message : "Unknown error"
+            }`,
           domain: serializeDomain(existingDomain),
         };
       }
@@ -446,9 +444,8 @@ export class DomainLookupService {
           );
           return {
             success: false,
-            message: `Failed to update domain status: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            message: `Failed to update domain status: ${error instanceof Error ? error.message : "Unknown error"
+              }`,
             domain: serializeDomain(existingDomain),
           };
         }
@@ -462,7 +459,7 @@ export class DomainLookupService {
       const getFirstValidDate = (...dateStrings: (string | number | boolean | object | null | undefined)[]) => {
         for (const dateStr of dateStrings) {
           if (!dateStr) continue;
-          
+
           let dateValue: string;
           if (typeof dateStr === 'string') {
             dateValue = dateStr;

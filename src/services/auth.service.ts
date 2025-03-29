@@ -78,7 +78,7 @@ export class AuthService {
           update: {},
         });
 
-        await prisma.userDomain.create({
+        await prisma.userDomains.create({
           data: {
             userId: BigInt(userId),
             domainId: domain.id,

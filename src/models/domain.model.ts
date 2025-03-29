@@ -5,7 +5,7 @@ import { DomainValidationService } from "@/services/domain-validation.service";
 export interface DomainModel {
   id: string;
   name: string;
-  whoisResponse: JsonValue;
+  response: JsonValue;
   registrar: string | null;
   emails: string | null;
   domainExpiryDate: Date | null;
@@ -19,7 +19,7 @@ export interface DomainModel {
 export interface DomainResponse {
   id: string;
   name: string;
-  whoisResponse: JsonValue;
+  response: JsonValue;
   registrar: string | null;
   emails: string | null;
   domainExpiryDate: Date | null;
@@ -44,22 +44,22 @@ export const serializeDomain = (domain: PrismaDomain): DomainResponse => {
   // Calculate cooldown status
   let onCooldown = false;
   let cooldownEndsAt = null;
-  
+
   if (domain.lastRefreshedAt) {
     const cooldownPeriod = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
     const cooldownEndsTime = new Date(domain.lastRefreshedAt.getTime() + cooldownPeriod);
     const now = new Date();
-    
+
     if (now < cooldownEndsTime) {
       onCooldown = true;
       cooldownEndsAt = cooldownEndsTime;
     }
   }
-  
+
   return {
     id: domain.id.toString(),
     name: domain.name,
-    whoisResponse: domain.whoisResponse || {},
+    response: domain.response || {},
     registrar: domain.registrar || null,
     emails: domain.emails || null,
     domainExpiryDate: domain.domainExpiryDate || null,

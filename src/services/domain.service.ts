@@ -8,6 +8,7 @@ import {
 } from "@/models/domain.model";
 import { DomainLookupService } from "@/services/domain-lookup.service";
 import type { WhoisRegistrar } from "@/services/domain-lookup.service";
+import { JsonValue } from "@prisma/client/runtime/library";
 
 export class DomainService {
   /**
@@ -31,7 +32,7 @@ export class DomainService {
       select: {
         id: true,
         name: true,
-        whoisResponse: true,
+        response: true,
         registrar: true,
         emails: true,
         domainExpiryDate: true,
@@ -102,7 +103,7 @@ export class DomainService {
       select: {
         id: true,
         name: true,
-        whoisResponse: true,
+        response: true,
         registrar: true,
         emails: true,
         domainExpiryDate: true,
@@ -137,7 +138,7 @@ export class DomainService {
     userId: string,
     domainId: string
   ): Promise<boolean> {
-    const userDomain = await prisma.userDomain.findUnique({
+    const userDomain = await prisma.userDomains.findUnique({
       where: {
         userId_domainId: {
           userId: BigInt(userId),
@@ -166,7 +167,7 @@ export class DomainService {
       const mockDomain = {
         id: BigInt(0),
         name: domainName,
-        whoisResponse: {},
+        response: {},
         registrar: null,
         emails: null,
         domainExpiryDate: null,
@@ -188,14 +189,14 @@ export class DomainService {
 
     // Check if user already has this domain
     const existingUserDomain = existingDomain
-      ? await prisma.userDomain.findUnique({
-          where: {
-            userId_domainId: {
-              userId: BigInt(userId),
-              domainId: existingDomain.id,
-            },
+      ? await prisma.userDomains.findUnique({
+        where: {
+          userId_domainId: {
+            userId: BigInt(userId),
+            domainId: existingDomain.id,
           },
-        })
+        },
+      })
       : null;
 
     // If user already has this domain, return it as a duplicate
@@ -212,7 +213,7 @@ export class DomainService {
       const newDomain = await prisma.domain.create({
         data: {
           name: sanitizedDomain,
-          whoisResponse: {},
+          response: {},
           registrar: null,
           emails: null,
           domainExpiryDate: null,
@@ -228,7 +229,7 @@ export class DomainService {
         select: {
           id: true,
           name: true,
-          whoisResponse: true,
+          response: true,
           registrar: true,
           emails: true,
           domainExpiryDate: true,
@@ -273,7 +274,7 @@ export class DomainService {
   ): Promise<void> {
     try {
       // Delete the user-domain association
-      await prisma.userDomain.delete({
+      await prisma.userDomains.delete({
         where: {
           userId_domainId: {
             userId: BigInt(userId),
@@ -283,7 +284,7 @@ export class DomainService {
       });
 
       // Check if any other users are tracking this domain
-      const otherUserTracking = await prisma.userDomain.findFirst({
+      const otherUserTracking = await prisma.userDomains.findFirst({
         where: {
           domainId: BigInt(domainId),
         },
@@ -354,7 +355,7 @@ export class DomainService {
       // Extract registrar information
       const registrarInfo =
         typeof whoisInfo.domain_registrar === "object" &&
-        whoisInfo.domain_registrar !== null
+          whoisInfo.domain_registrar !== null
           ? (whoisInfo.domain_registrar as WhoisRegistrar)
           : {};
       const registrarName = registrarInfo.registrar_name || null;
@@ -371,18 +372,21 @@ export class DomainService {
       const updatedDomain = await prisma.domain.update({
         where: { id: domainId },
         data: {
-          whoisResponse: whoisInfo || {},
+          response: JSON.parse(JSON.stringify({
+            ...whoisInfo,
+            domain_registered: isRegistered ? "yes" : "no",
+          })),
           registrar: registrarName,
           emails: null,
-          domainCreatedDate,
           domainExpiryDate,
+          domainCreatedDate,
           domainUpdatedDate: new Date(),
           lastRefreshedAt: new Date(),
         },
         select: {
           id: true,
           name: true,
-          whoisResponse: true,
+          response: true,
           registrar: true,
           emails: true,
           domainExpiryDate: true,
@@ -400,7 +404,7 @@ export class DomainService {
         name: updatedDomain.name,
         domainCreatedDate: updatedDomain.domainCreatedDate,
         domainExpiryDate: updatedDomain.domainExpiryDate,
-        whoisResponse: updatedDomain.whoisResponse,
+        response: updatedDomain.response,
       });
     } catch (error) {
       console.error(`Error fetching WHOIS data for ${domainName}:`, error);
@@ -411,7 +415,7 @@ export class DomainService {
           data: {
             domainUpdatedDate: new Date(),
             lastRefreshedAt: new Date(),
-            whoisResponse: {
+            response: {
               error: error instanceof Error ? error.message : "Unknown error",
             },
           },
@@ -455,14 +459,14 @@ export class DomainService {
 
         // Check if user already has this domain
         const existingUserDomain = existingDomain
-          ? await prisma.userDomain.findUnique({
-              where: {
-                userId_domainId: {
-                  userId: BigInt(userId),
-                  domainId: existingDomain.id,
-                },
+          ? await prisma.userDomains.findUnique({
+            where: {
+              userId_domainId: {
+                userId: BigInt(userId),
+                domainId: existingDomain.id,
               },
-            })
+            },
+          })
           : null;
 
         // If user already has this domain, add it to duplicates

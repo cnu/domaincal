@@ -14,7 +14,7 @@ model User {
   lastLoginAt DateTime?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime?     @updatedAt
-  domains     UserDomain[]
+  domains     UserDomains[]
 
   @@index([email])
 }
@@ -22,7 +22,7 @@ model User {
 model Domain {
   id                BigInt        @id @default(autoincrement())
   name              String        @unique
-  whoisResponse     Json?
+  response          Json?
   registrar         String?
   emails            String?
   domainExpiryDate  DateTime?
@@ -31,12 +31,12 @@ model Domain {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   lastRefreshedAt  DateTime?
-  users            UserDomain[]
+  users            UserDomains[]
 
   @@index([name])
 }
 
-model UserDomain {
+model UserDomains {
   id        BigInt   @id @default(autoincrement())
   userId    BigInt
   domainId  BigInt
