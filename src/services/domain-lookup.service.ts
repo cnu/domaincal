@@ -360,14 +360,30 @@ export class DomainLookupService {
 
       if (!forceRefresh && domainWithRefresh.lastRefreshedAt) {
         const lastRefreshed = new Date(domainWithRefresh.lastRefreshedAt);
-        const cooldownPeriod = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+        // Use shorter cooldown if there's no WHOIS response or if the last attempt failed
+        const hasSuccessfulWhoisResponse = domainWithRefresh.whoisResponse && 
+          Object.keys(domainWithRefresh.whoisResponse).length > 0 && 
+          typeof domainWithRefresh.whoisResponse === 'object' &&
+          !('error' in domainWithRefresh.whoisResponse);
+        const cooldownPeriod = hasSuccessfulWhoisResponse
+          ? 24 * 60 * 60 * 1000 // 24 hours in milliseconds for domains with successful WHOIS data
+          : 5 * 1000; // 5 seconds for domains without data or with errors
         const cooldownEnds = new Date(lastRefreshed.getTime() + cooldownPeriod);
         const now = new Date();
 
         if (now < cooldownEnds) {
           // Calculate time remaining in the cooldown period
           const timeRemaining = cooldownEnds.getTime() - now.getTime();
-          const hoursRemaining = Math.ceil(timeRemaining / (60 * 60 * 1000));
+          const hasWhoisResponse = domainWithRefresh.whoisResponse && Object.keys(domainWithRefresh.whoisResponse).length > 0;
+          
+          let timeMessage: string;
+          if (hasWhoisResponse) {
+            const hoursRemaining = Math.ceil(timeRemaining / (60 * 60 * 1000));
+            timeMessage = `${hoursRemaining} hour${hoursRemaining === 1 ? '' : 's'}`;
+          } else {
+            const secondsRemaining = Math.ceil(timeRemaining / 1000);
+            timeMessage = `${secondsRemaining} second${secondsRemaining === 1 ? '' : 's'}`;
+          }
 
           // Create serialized domain with cooldown information
           const serializedDomain = serializeDomain(
@@ -380,10 +396,8 @@ export class DomainLookupService {
           return {
             success: false,
             onCooldown: true,
-            hoursRemaining,
-            message: `Domain refresh on cooldown. Please try again in ${hoursRemaining} hour${
-              hoursRemaining === 1 ? "" : "s"
-            }.`,
+            timeRemaining,
+            message: `Domain refresh on cooldown. Please try again in ${timeMessage}.`,
             domain: serializedDomain,
           } as DomainLookupResponse;
         }
