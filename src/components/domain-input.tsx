@@ -172,11 +172,8 @@ export function DomainInput({ onSubmit, isLoading }: DomainInputProps) {
 
     try {
       if (!session) {
-        // Store domains in localStorage for anonymous users
-        // For simplicity, just store the first domain
-        if (domains.length > 0) {
-          addPendingDomain(domains[0]);
-        }
+        // Store all domains in localStorage for anonymous users
+        domains.forEach((domain) => addPendingDomain(domain));
         setValue("");
 
         // Dispatch custom event to open auth dialog

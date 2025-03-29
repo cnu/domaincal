@@ -8,8 +8,6 @@ import {
 } from "@/models/domain.model";
 import { DomainLookupService } from "@/services/domain-lookup.service";
 import type { WhoisRegistrar } from "@/services/domain-lookup.service";
-import { JsonValue } from "@prisma/client/runtime/library";
-
 export class DomainService {
   /**
    * Get all domains for a user
@@ -190,13 +188,13 @@ export class DomainService {
     // Check if user already has this domain
     const existingUserDomain = existingDomain
       ? await prisma.userDomain.findUnique({
-        where: {
-          userId_domainId: {
-            userId: BigInt(userId),
-            domainId: existingDomain.id,
+          where: {
+            userId_domainId: {
+              userId: BigInt(userId),
+              domainId: existingDomain.id,
+            },
           },
-        },
-      })
+        })
       : null;
 
     // If user already has this domain, return it as a duplicate
@@ -273,7 +271,7 @@ export class DomainService {
     domainId: string
   ): Promise<void> {
     try {
-      console.log('Attempting to delete domain:', { userId, domainId });
+      console.log("Attempting to delete domain:", { userId, domainId });
 
       // First check if the user-domain association exists
       const userDomain = await prisma.userDomain.findUnique({
@@ -285,7 +283,7 @@ export class DomainService {
         },
       });
 
-      console.log('Found user domain:', userDomain);
+      console.log("Found user domain:", userDomain);
 
       if (!userDomain) {
         throw new Error("Domain not found or not owned by user");
@@ -301,26 +299,7 @@ export class DomainService {
         },
       });
 
-      console.log('Deleted user domain association');
-
-      // Check if any other users are tracking this domain
-      const otherUserTracking = await prisma.userDomain.findFirst({
-        where: {
-          domainId: BigInt(domainId),
-        },
-      });
-
-      console.log('Other users tracking:', otherUserTracking);
-
-      // If no other users are tracking this domain, delete it
-      if (!otherUserTracking) {
-        await prisma.domain.delete({
-          where: {
-            id: BigInt(domainId),
-          },
-        });
-        console.log('Deleted domain');
-      }
+      console.log("Deleted user domain association");
     } catch (error) {
       console.error(
         `Error deleting domain ${domainId} for user ${userId}:`,
@@ -378,7 +357,7 @@ export class DomainService {
       // Extract registrar information
       const registrarInfo =
         typeof whoisInfo.domain_registrar === "object" &&
-          whoisInfo.domain_registrar !== null
+        whoisInfo.domain_registrar !== null
           ? (whoisInfo.domain_registrar as WhoisRegistrar)
           : {};
       const registrarName = registrarInfo.registrar_name || null;
@@ -395,10 +374,12 @@ export class DomainService {
       const updatedDomain = await prisma.domain.update({
         where: { id: domainId },
         data: {
-          response: JSON.parse(JSON.stringify({
-            ...whoisInfo,
-            domain_registered: isRegistered ? "yes" : "no",
-          })),
+          response: JSON.parse(
+            JSON.stringify({
+              ...whoisInfo,
+              domain_registered: isRegistered ? "yes" : "no",
+            })
+          ),
           registrar: registrarName,
           emails: null,
           domainExpiryDate,
@@ -483,13 +464,13 @@ export class DomainService {
         // Check if user already has this domain
         const existingUserDomain = existingDomain
           ? await prisma.userDomain.findUnique({
-            where: {
-              userId_domainId: {
-                userId: BigInt(userId),
-                domainId: existingDomain.id,
+              where: {
+                userId_domainId: {
+                  userId: BigInt(userId),
+                  domainId: existingDomain.id,
+                },
               },
-            },
-          })
+            })
           : null;
 
         // If user already has this domain, add it to duplicates
