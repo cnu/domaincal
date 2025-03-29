@@ -105,13 +105,10 @@ export async function GET() {
         expiryDate: updatedDomain.domainExpiryDate,
         createdDate: updatedDomain.domainCreatedDate,
         updatedDate: updatedDomain.domainUpdatedDate,
-        registrarInfo: {
-          name: updatedDomain.registrarName,
-          ianaId: updatedDomain.registrarIanaId,
-          whoisServer: updatedDomain.registrarWhoisServer,
-          url: updatedDomain.registrarUrl
-        },
-        response: updatedDomain.response,
+        registrar: updatedDomain.registrar,
+        emails: updatedDomain.emails,
+        whoisResponse: updatedDomain.whoisResponse,
+        lastRefreshedAt: updatedDomain.lastRefreshedAt,
       });
 
       const responseData = {
@@ -122,13 +119,10 @@ export async function GET() {
           domainExpiryDate: updatedDomain.domainExpiryDate,
           domainCreatedDate: updatedDomain.domainCreatedDate,
           domainUpdatedDate: updatedDomain.domainUpdatedDate,
-          registrarInfo: {
-          name: updatedDomain.registrarName,
-          ianaId: updatedDomain.registrarIanaId,
-          whoisServer: updatedDomain.registrarWhoisServer,
-          url: updatedDomain.registrarUrl
-        },
-          response: updatedDomain.response || null,
+          registrar: updatedDomain.registrar,
+          emails: updatedDomain.emails,
+          whoisResponse: updatedDomain.whoisResponse,
+          lastRefreshedAt: updatedDomain.lastRefreshedAt,
         },
         whoisInfo: whoisInfo || null,
       };
