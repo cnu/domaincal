@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { DomainService } from "@/services/domain.service";
-import { DomainLookupService } from "@/services/domain-lookup.service";
+import { DomainLookupService, type WhoisQueryResponse, type WhoisDateFields } from "@/services/domain-lookup.service";
 import { prisma } from "@/lib/prisma";
 import { Domain } from "@prisma/client";
 
@@ -42,6 +42,24 @@ export async function GET() {
         throw new Error("WHOIS API returned null response");
       }
       console.log("Raw WHOIS response:", JSON.stringify(whoisInfo, null, 2));
+      
+      // Check all possible expiry date fields
+      const whoisResponse = whoisInfo as WhoisQueryResponse;
+      
+      // Helper function to safely get date from response
+      const getDateFromResponse = (response: WhoisDateFields | undefined) => {
+        if (!response) return undefined;
+        return response.expiry_date || response.expiration_date || response.expire_date;
+      };
+
+      // Get dates from all possible locations
+      const rootDate = getDateFromResponse(whoisResponse);
+      const registryDate = whoisResponse.registry_data?.expiry_date;
+      const storedDate = getDateFromResponse(whoisResponse.whoisResponse as WhoisDateFields);
+
+      console.log("Root level date:", rootDate);
+      console.log("Registry data date:", registryDate);
+      console.log("Stored WHOIS date:", storedDate);
     } catch (error) {
       console.error("WHOIS API lookup failed:", error);
       return NextResponse.json(

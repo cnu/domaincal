@@ -10,7 +10,7 @@ export interface WhoisRegistrar {
   email?: string;
 }
 
-interface WhoisDateFields {
+export interface WhoisDateFields {
   expiry_date?: string;
   expiration_date?: string;
   expire_date?: string;
@@ -36,7 +36,7 @@ interface WhoisRegistryData {
   whois_raw_registery?: string;
 }
 
-interface WhoisQueryResponse extends WhoisDateFields {
+export interface WhoisQueryResponse extends WhoisDateFields {
   // Basic domain info
   domain_name?: string;
   status?: boolean;
