@@ -10,6 +10,16 @@ export interface WhoisRegistrar {
   email?: string;
 }
 
+interface WhoisDateFields {
+  expiry_date?: string;
+  expiration_date?: string;
+  expire_date?: string;
+  creation_date?: string;
+  create_date?: string;
+  updated_date?: string;
+  update_date?: string;
+}
+
 interface WhoisRegistryData {
   domain_name?: string;
   query_time?: string;
@@ -26,7 +36,7 @@ interface WhoisRegistryData {
   whois_raw_registery?: string;
 }
 
-interface WhoisQueryResponse {
+interface WhoisQueryResponse extends WhoisDateFields {
   // Basic domain info
   domain_name?: string;
   status?: boolean;
@@ -34,13 +44,6 @@ interface WhoisQueryResponse {
   whois_server?: string;
   domain_registered?: string;
 
-  // Dates
-  creation_date?: string;
-  create_date?: string;
-  updated_date?: string;
-  update_date?: string;
-  expiration_date?: string;
-  expire_date?: string;
   domain_age?: number;
 
   // Raw WHOIS data
@@ -507,10 +510,20 @@ export class DomainLookupService {
           whoisInfo.updated_date
         ),
         domainExpiryDate: getFirstValidDate(
+          // Check registry data first
           registryData.expiry_date,
+          // Check root level WHOIS response
           whoisInfo.expiry_date,
           whoisInfo.expiration_date,
-          whoisInfo.expire_date
+          whoisInfo.expire_date,
+          // Check if there's an expiry date in the stored whoisResponse
+          typeof whoisInfo.whoisResponse === 'object' && whoisInfo.whoisResponse
+            ? (
+              (whoisInfo.whoisResponse as WhoisDateFields).expiry_date ||
+              (whoisInfo.whoisResponse as WhoisDateFields).expiration_date ||
+              (whoisInfo.whoisResponse as WhoisDateFields).expire_date
+            )
+            : undefined
         ),
 
         // Update refresh timestamp
