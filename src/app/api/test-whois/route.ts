@@ -125,7 +125,7 @@ export async function GET() {
         updatedDate: updatedDomain.domainUpdatedDate,
         registrar: updatedDomain.registrar,
         emails: updatedDomain.emails,
-        whoisResponse: updatedDomain.whoisResponse,
+        response: updatedDomain.response,
         lastRefreshedAt: updatedDomain.lastRefreshedAt,
       });
 
@@ -139,7 +139,7 @@ export async function GET() {
           domainUpdatedDate: updatedDomain.domainUpdatedDate,
           registrar: updatedDomain.registrar,
           emails: updatedDomain.emails,
-          whoisResponse: updatedDomain.whoisResponse,
+          response: updatedDomain.response,
           lastRefreshedAt: updatedDomain.lastRefreshedAt,
         },
         whoisInfo: whoisInfo || null,
