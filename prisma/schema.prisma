@@ -23,15 +23,15 @@ model User {
 model Domain {
   id                BigInt        @id @default(autoincrement())
   name              String        @unique
-  response          Json?
   registrar         String?
   emails            String?
   domainExpiryDate  DateTime?     @map("domain_expiry_date")
   domainCreatedDate DateTime?     @map("domain_created_date")
   domainUpdatedDate DateTime?     @map("domain_updated_date")
+  lastRefreshedAt  DateTime?     @map("last_refreshed_at")
+  response          Json?
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime      @updatedAt @map("updated_at")
-  lastRefreshedAt  DateTime?     @map("last_refreshed_at")
   users            UserDomain[]
 
   @@index([name])

@@ -14,15 +14,15 @@ CREATE TABLE "users" (
 CREATE TABLE "domains" (
     "id" BIGSERIAL NOT NULL,
     "name" TEXT NOT NULL,
-    "response" JSONB,
     "registrar" TEXT,
     "emails" TEXT,
     "domain_expiry_date" TIMESTAMP(3),
     "domain_created_date" TIMESTAMP(3),
     "domain_updated_date" TIMESTAMP(3),
+    "last_refreshed_at" TIMESTAMP(3),
+    "response" JSONB,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
-    "last_refreshed_at" TIMESTAMP(3),
 
     CONSTRAINT "domains_pkey" PRIMARY KEY ("id")
 );
