@@ -138,7 +138,7 @@ export class DomainService {
     userId: string,
     domainId: string
   ): Promise<boolean> {
-    const userDomain = await prisma.userDomains.findUnique({
+    const userDomain = await prisma.userDomain.findUnique({
       where: {
         userId_domainId: {
           userId: BigInt(userId),
@@ -146,7 +146,7 @@ export class DomainService {
         },
       },
       include: {
-        domain: true, // Include domain details for validation
+        domain: true,
       },
     });
 
@@ -189,7 +189,7 @@ export class DomainService {
 
     // Check if user already has this domain
     const existingUserDomain = existingDomain
-      ? await prisma.userDomains.findUnique({
+      ? await prisma.userDomain.findUnique({
         where: {
           userId_domainId: {
             userId: BigInt(userId),
@@ -273,8 +273,10 @@ export class DomainService {
     domainId: string
   ): Promise<void> {
     try {
-      // Delete the user-domain association
-      await prisma.userDomains.delete({
+      console.log('Attempting to delete domain:', { userId, domainId });
+
+      // First check if the user-domain association exists
+      const userDomain = await prisma.userDomain.findUnique({
         where: {
           userId_domainId: {
             userId: BigInt(userId),
@@ -283,12 +285,32 @@ export class DomainService {
         },
       });
 
+      console.log('Found user domain:', userDomain);
+
+      if (!userDomain) {
+        throw new Error("Domain not found or not owned by user");
+      }
+
+      // Delete the user-domain association
+      await prisma.userDomain.delete({
+        where: {
+          userId_domainId: {
+            userId: BigInt(userId),
+            domainId: BigInt(domainId),
+          },
+        },
+      });
+
+      console.log('Deleted user domain association');
+
       // Check if any other users are tracking this domain
-      const otherUserTracking = await prisma.userDomains.findFirst({
+      const otherUserTracking = await prisma.userDomain.findFirst({
         where: {
           domainId: BigInt(domainId),
         },
       });
+
+      console.log('Other users tracking:', otherUserTracking);
 
       // If no other users are tracking this domain, delete it
       if (!otherUserTracking) {
@@ -297,6 +319,7 @@ export class DomainService {
             id: BigInt(domainId),
           },
         });
+        console.log('Deleted domain');
       }
     } catch (error) {
       console.error(
@@ -459,7 +482,7 @@ export class DomainService {
 
         // Check if user already has this domain
         const existingUserDomain = existingDomain
-          ? await prisma.userDomains.findUnique({
+          ? await prisma.userDomain.findUnique({
             where: {
               userId_domainId: {
                 userId: BigInt(userId),
