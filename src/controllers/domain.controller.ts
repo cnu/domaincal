@@ -287,8 +287,19 @@ export class DomainController {
               success: false,
               error: result.message || "Domain lookup is on cooldown",
               onCooldown: true,
+              hoursRemaining: result.hoursRemaining,
             },
             { status: 429 }
+          );
+        } else if (result.message?.includes("timeout")) {
+          // If the request timed out, return a 408 status (Request Timeout)
+          return NextResponse.json(
+            {
+              success: false,
+              error: result.message || "WHOIS API request timed out",
+              retryAfter: 30, // Suggest retry after 30 seconds
+            },
+            { status: 408 }
           );
         } else {
           // For other errors, return a 400 status (Bad Request)

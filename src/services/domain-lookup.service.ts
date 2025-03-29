@@ -98,48 +98,78 @@ export class DomainLookupService {
       });
 
       // Construct API URL
-      const apiUrl = `${this.API_BASE_URL}/whois?whois=live&domainName=${domainName}&apiKey=${this.API_KEY}`;
-      console.log('Making WHOIS API request for domain:', domainName);
-      console.log('API URL:', apiUrl);
+      // Set a timeout for the API request
+      const controller = new AbortController();
+      const timeout = setTimeout(() => {
+        console.warn(`WHOIS API request timeout for ${domainName}`);
+        controller.abort();
+      }, 10000); // 10 second timeout
 
-      // Make the API call
-      const response = await fetch(apiUrl, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        } as HeadersInit,
-        redirect: "follow",
-      });
+      try {
+        const apiUrl = `${this.API_BASE_URL}/whois?whois=live&domainName=${domainName}&apiKey=${this.API_KEY}`;
+        console.log(`Fetching WHOIS data for ${domainName}...`);
 
-      console.log(
-        `WHOIS API Response for ${domainName}:`,
-        {
-          status: response.status,
-          statusText: response.statusText,
-          headers: Object.fromEntries(response.headers.entries())
+        // Make the API call with timeout and caching
+        const response = await fetch(apiUrl, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          } as HeadersInit,
+          signal: controller.signal,
+          cache: 'no-store', // Disable caching for now to debug
+        }).catch((error) => {
+          if (error.name === 'AbortError') {
+            throw new Error(`WHOIS API request timed out after 10 seconds for domain ${domainName}`);
+          }
+          throw error;
+        });
+
+        if (!response) {
+          throw new Error(`No response received from WHOIS API for domain ${domainName}`);
         }
-      );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        const errorDetails = {
-          status: response.status,
-          statusText: response.statusText,
-          headers: Object.fromEntries(response.headers.entries()),
-          body: errorText
-        };
-        console.error(`WHOIS API error for ${domainName}:`, errorDetails);
-        throw new Error(`WHOIS API failed with status ${response.status}: ${errorText}`);
-      }
+        if (response.status === 429) { // Rate limit hit
+          console.warn(`Rate limit hit for domain ${domainName}, backing off...`);
+          await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+          throw new Error('Rate limit hit, please try again');
+        }
 
-      const whoisData = await response.json();
-      console.log(
-        `WHOIS API data for ${domainName}:`,
-        JSON.stringify(whoisData, null, 2)
-      );
+        if (!response.ok) {
+          const errorText = await response.text();
+          const errorDetails = {
+            status: response.status,
+            statusText: response.statusText,
+            headers: Object.fromEntries(response.headers.entries()),
+            body: errorText
+          };
+          console.error(`WHOIS API error for ${domainName}:`, errorDetails);
+          throw new Error(`WHOIS API failed with status ${response.status}: ${errorText}`);
+        }
 
-      if (!whoisData || typeof whoisData !== 'object') {
-        throw new Error(`Invalid WHOIS API response for ${domainName}: ${JSON.stringify(whoisData)}`);
+        const whoisData = await response.json();
+
+        if (!whoisData || typeof whoisData !== 'object') {
+          throw new Error(`Invalid WHOIS API response for ${domainName}: ${JSON.stringify(whoisData)}`);
+        }
+
+        return whoisData as WhoisQueryResponse;
+      } catch (error: unknown) {
+        console.error(`Error fetching WHOIS data for ${domainName}:`, error);
+
+        // Handle specific error types
+        if (error instanceof Error) {
+          if (error.name === 'AbortError' || error.message.includes('timeout')) {
+            throw new Error(`WHOIS API request timed out after 10 seconds for domain ${domainName}. Please try again later.`);
+          } else if (error.message.includes('Rate limit')) {
+            throw new Error(`WHOIS API rate limit exceeded for domain ${domainName}. Please wait a few minutes and try again.`);
+          }
+        }
+
+        // Default error
+        throw new Error(`Failed to fetch WHOIS data for domain ${domainName}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        clearTimeout(timeout);
       }
 
       // Helper function to parse date strings
@@ -153,33 +183,45 @@ export class DomainLookupService {
         }
       };
 
+      // Get WHOIS data
+      const whoisData = await this.getDetailedWhoisInfo(domainName);
+
       // Extract registrar info
-      const registrarInfo = whoisData.domain_registrar || {};
+      const registrarInfo = (whoisData.domain_registrar || {}) as WhoisRegistrar;
+
+      // Helper function to check if a value indicates a registered domain
+      const isRegistered = (value: unknown): boolean => {
+        if (typeof value === 'boolean') return value;
+        if (typeof value === 'string') return value.toLowerCase() === 'yes';
+        return false;
+      };
+
+      // Helper function to safely get string array
+      const getStringArray = (value: unknown): string[] => {
+        if (!Array.isArray(value)) return [];
+        return value.filter((item): item is string => typeof item === 'string');
+      };
 
       // Create normalized response
       const normalizedResponse: WhoisQueryResponse = {
-        domain_name: whoisData.domain_name,
-        status: whoisData.status === true || whoisData.domain_registered === true || whoisData.domain_registered === "yes",
-        query_time: whoisData.query_time,
-        whois_server: whoisData.whois_server,
-        domain_registered: (whoisData.status === true || whoisData.domain_registered === true || whoisData.domain_registered === "yes") ? "yes" : "no",
-        create_date: parseDate(whoisData.create_date)?.toISOString(),
-        update_date: parseDate(whoisData.update_date)?.toISOString(),
-        expiry_date: parseDate(whoisData.expiry_date)?.toISOString(),
+        domain_name: String(whoisData.domain_name || ''),
+        status: isRegistered(whoisData.status) || isRegistered(whoisData.domain_registered),
+        query_time: String(whoisData.query_time || ''),
+        whois_server: String(whoisData.whois_server || ''),
+        domain_registered: isRegistered(whoisData.status) || isRegistered(whoisData.domain_registered) ? 'yes' : 'no',
+        create_date: parseDate(String(whoisData.create_date || ''))?.toISOString() || '',
+        update_date: parseDate(String(whoisData.update_date || ''))?.toISOString() || '',
+        expiry_date: parseDate(String(whoisData.expiry_date || ''))?.toISOString() || '',
         domain_registrar: {
-          iana_id: registrarInfo.iana_id,
-          registrar_name: registrarInfo.registrar_name,
-          whois_server: registrarInfo.whois_server,
-          website_url: registrarInfo.website_url,
-          email: registrarInfo.email,
+          iana_id: String(registrarInfo.iana_id || ''),
+          registrar_name: String(registrarInfo.registrar_name || ''),
+          whois_server: String(registrarInfo.whois_server || ''),
+          website_url: String(registrarInfo.website_url || ''),
+          email: String(registrarInfo.email || ''),
         },
-        name_servers: Array.isArray(whoisData.name_servers)
-          ? whoisData.name_servers.filter(Boolean)
-          : [],
-        domain_status: Array.isArray(whoisData.domain_status)
-          ? whoisData.domain_status
-          : [],
-        whois_raw_domain: whoisData.whois_raw_domain,
+        name_servers: getStringArray(whoisData.name_servers),
+        domain_status: getStringArray(whoisData.domain_status),
+        whois_raw_domain: String(whoisData.whois_raw_domain || ''),
       };
 
       console.log(`Normalized WHOIS data for ${domainName}:`, {
@@ -206,13 +248,28 @@ export class DomainLookupService {
     domainId: string,
     forceRefresh: boolean = false
   ): Promise<DomainLookupResponse> {
+    let existingDomain: PrismaDomain | null = null;
     try {
       // 1. Validate inputs
       if (!domainId || isNaN(Number(domainId))) {
         return {
           success: false,
           message: "Invalid domain ID provided",
-          domain: null as unknown as DomainLookupResponse["domain"],
+          domain: {
+            id: domainId || '0',
+            name: 'Unknown',
+            whoisResponse: {},
+            registrar: null,
+            emails: null,
+            domainExpiryDate: null,
+            domainCreatedDate: null,
+            domainUpdatedDate: null,
+            createdAt: new Date(),
+            updatedAt: null,
+            lastRefreshedAt: null,
+            onCooldown: false,
+            cooldownEndsAt: null,
+          },
         };
       }
 
@@ -225,12 +282,25 @@ export class DomainLookupService {
           success: false,
           message:
             "WHOIS API key is not configured. Please configure the API key in the environment variables.",
-          domain: null as unknown as DomainLookupResponse["domain"],
+          domain: {
+            id: domainId,
+            name: 'Unknown',
+            whoisResponse: {},
+            registrar: null,
+            emails: null,
+            domainExpiryDate: null,
+            domainCreatedDate: null,
+            domainUpdatedDate: null,
+            createdAt: new Date(),
+            updatedAt: null,
+            lastRefreshedAt: null,
+            onCooldown: false,
+            cooldownEndsAt: null,
+          },
         };
       }
 
       // 3. Fetch the domain to ensure it exists and check refresh cooldown
-      let existingDomain;
       try {
         existingDomain = await prisma.domain.findUnique({
           where: { id: BigInt(domainId) },
@@ -242,7 +312,21 @@ export class DomainLookupService {
           message: `Error fetching domain: ${
             error instanceof Error ? error.message : "Unknown error"
           }`,
-          domain: null as unknown as DomainLookupResponse["domain"],
+          domain: {
+            id: domainId,
+            name: 'Unknown',
+            whoisResponse: {},
+            registrar: null,
+            emails: null,
+            domainExpiryDate: null,
+            domainCreatedDate: null,
+            domainUpdatedDate: null,
+            createdAt: new Date(),
+            updatedAt: null,
+            lastRefreshedAt: null,
+            onCooldown: false,
+            cooldownEndsAt: null,
+          },
         };
       }
 
@@ -250,7 +334,21 @@ export class DomainLookupService {
         return {
           success: false,
           message: `Domain with ID ${domainId} not found`,
-          domain: null as unknown as DomainLookupResponse["domain"],
+          domain: {
+            id: domainId,
+            name: 'Unknown',
+            whoisResponse: {},
+            registrar: null,
+            emails: null,
+            domainExpiryDate: null,
+            domainCreatedDate: null,
+            domainUpdatedDate: null,
+            createdAt: new Date(),
+            updatedAt: null,
+            lastRefreshedAt: null,
+            onCooldown: false,
+            cooldownEndsAt: null,
+          },
         };
       }
 
@@ -317,9 +415,10 @@ export class DomainLookupService {
           const domain = await prisma.domain.update({
             where: { id: BigInt(domainId) },
             data: {
-              domainRegistered: false,
               lastRefreshedAt: new Date(),
-              response: whoisInfo,
+              whoisResponse: whoisInfo,
+              registrar: null,
+              emails: null
             },
           });
           return { success: true, domain: serializeDomain(domain) };
@@ -345,22 +444,13 @@ export class DomainLookupService {
       // Prepare update data with correct types
       const updateData = {
         // Store the complete response
-        response: whoisInfo,
+        whoisResponse: whoisInfo,
 
-        // Basic domain info
-        domainRegistered: 
-            (typeof whoisInfo.status === "boolean" && whoisInfo.status === true) || 
-            (typeof whoisInfo.domain_registered === "boolean" && whoisInfo.domain_registered === true) || 
-            (registryData.domain_registered !== undefined && (
-              (typeof registryData.domain_registered === "string" && registryData.domain_registered.toLowerCase() === "yes") || 
-              (typeof registryData.domain_registered === "boolean" && registryData.domain_registered === true)
-            )),
-        whoisServer: registryData.whois_server || whoisInfo.whois_server || null,
-        queryTime: registryData.query_time
-          ? new Date(registryData.query_time)
-          : whoisInfo.query_time
-          ? new Date(whoisInfo.query_time)
-          : null,
+        // Registrar information
+        registrar: registrar.registrar_name || null,
+
+        // Email information
+        emails: registrar.email || null,
 
         // Dates
         domainCreatedDate: registryData.create_date
@@ -372,22 +462,6 @@ export class DomainLookupService {
         domainExpiryDate: registryData.expiry_date
           ? new Date(registryData.expiry_date)
           : null,
-
-        // Registrar information
-        registrarIanaId: registrar.iana_id || null,
-        registrarName: registrar.registrar_name || null,
-        registrarWhoisServer: registrar.whois_server || null,
-        registrarUrl: registrar.website_url || null,
-
-        // Domain status and servers
-        nameServers: registryData.name_servers || [],
-        domainStatuses: registryData.domain_status || [],
-        dnssecStatus: registryData.dnssec || null,
-        dnssecDsData: registryData.dnssec_ds_data || null,
-
-        // Raw WHOIS data
-        whoisRawDomain: whoisInfo.whois_raw_domain || null,
-        whoisRawRegistry: registryData.whois_raw_registery || null,
 
         // Update refresh timestamp
         lastRefreshedAt: new Date(),
@@ -408,10 +482,31 @@ export class DomainLookupService {
       // Return a structured error response instead of throwing
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
+      if (!existingDomain) {
+        return {
+          success: false,
+          message: `Failed to update domain information: ${errorMessage}`,
+          domain: {
+            id: domainId,
+            name: 'Unknown',
+            whoisResponse: {},
+            registrar: null,
+            emails: null,
+            domainExpiryDate: null,
+            domainCreatedDate: null,
+            domainUpdatedDate: null,
+            createdAt: new Date(),
+            updatedAt: null,
+            lastRefreshedAt: null,
+            onCooldown: false,
+            cooldownEndsAt: null,
+          }
+        };
+      }
       return {
         success: false,
         message: `Failed to update domain information: ${errorMessage}`,
-        domain: null as unknown as DomainLookupResponse["domain"],
+        domain: serializeDomain(existingDomain),
       };
     }
   }
@@ -441,7 +536,11 @@ export class DomainLookupService {
             },
           ],
         },
-        take: 10, // Process in batches of 10 for performance
+        // Add index hint for performance
+        take: 3, // Reduce batch size to avoid rate limits
+        orderBy: {
+          lastRefreshedAt: 'asc', // Update oldest first
+        },
       });
 
       // No domains to update
@@ -449,17 +548,26 @@ export class DomainLookupService {
         return 0;
       }
 
-      // Update each domain with WHOIS information
-      let updatedCount = 0;
-      for (const domain of domains) {
-        try {
-          await this.updateDomainInfo(domain.id.toString());
-          updatedCount++;
-        } catch (error) {
-          console.error(`Error updating domain ${domain.name}:`, error);
-          // Continue with other domains even if one fails
-        }
-      }
+      // Process domains in parallel with rate limiting
+      const results = await Promise.allSettled(
+        domains.map(async (domain) => {
+          try {
+            await this.updateDomainInfo(domain.id.toString(), true);
+            return true;
+          } catch (error) {
+            console.error(
+              `Error updating domain ${domain.name}:`,
+              error instanceof Error ? error.message : error
+            );
+            return false;
+          }
+        })
+      );
+
+      // Count successful updates
+      const updatedCount = results.filter(
+        (r) => r.status === 'fulfilled' && r.value === true
+      ).length;
 
       return updatedCount;
     } catch (error) {

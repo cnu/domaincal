@@ -28,6 +28,20 @@ export class DomainService {
         // Secondary sort by name for domains with no expiry date
         { name: "asc" },
       ],
+      select: {
+        id: true,
+        name: true,
+        whoisResponse: true,
+        registrar: true,
+        emails: true,
+        domainExpiryDate: true,
+        domainCreatedDate: true,
+        domainUpdatedDate: true,
+        createdAt: true,
+        updatedAt: true,
+        lastRefreshedAt: true,
+        users: true,
+      },
     });
 
     return domains.map(serializeDomain);
@@ -85,6 +99,20 @@ export class DomainService {
       ],
       skip,
       take: validLimit,
+      select: {
+        id: true,
+        name: true,
+        whoisResponse: true,
+        registrar: true,
+        emails: true,
+        domainExpiryDate: true,
+        domainCreatedDate: true,
+        domainUpdatedDate: true,
+        createdAt: true,
+        updatedAt: true,
+        lastRefreshedAt: true,
+        users: true,
+      },
     });
 
     // Calculate total pages
@@ -109,7 +137,7 @@ export class DomainService {
     userId: string,
     domainId: string
   ): Promise<boolean> {
-    const userDomain = await prisma.userDomains.findUnique({
+    const userDomain = await prisma.userDomain.findUnique({
       where: {
         userId_domainId: {
           userId: BigInt(userId),
@@ -136,28 +164,17 @@ export class DomainService {
     if (!sanitizedDomain || !validateDomain(sanitizedDomain)) {
       // Create a mock domain object that matches the Prisma schema
       const mockDomain = {
-        id: BigInt(0), // Use BigInt(0) instead of empty string
+        id: BigInt(0),
         name: domainName,
-        domainRegistered: false,
-        whoisServer: null,
-        queryTime: null,
+        whoisResponse: {},
+        registrar: null,
+        emails: null,
         domainExpiryDate: null,
         domainCreatedDate: null,
         domainUpdatedDate: null,
         lastRefreshedAt: null,
-        registrarIanaId: null,
-        registrarName: null,
-        registrarWhoisServer: null,
-        registrarUrl: null,
-        nameServers: [],
-        domainStatuses: [],
-        dnssecStatus: null,
-        dnssecDsData: null,
-        whoisRawDomain: null,
-        whoisRawRegistry: null,
-        response: null,
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
       };
 
       // Return a serialized domain with error indication
@@ -171,7 +188,7 @@ export class DomainService {
 
     // Check if user already has this domain
     const existingUserDomain = existingDomain
-      ? await prisma.userDomains.findUnique({
+      ? await prisma.userDomain.findUnique({
           where: {
             userId_domainId: {
               userId: BigInt(userId),
@@ -195,8 +212,32 @@ export class DomainService {
       const newDomain = await prisma.domain.create({
         data: {
           name: sanitizedDomain,
+          whoisResponse: {},
+          registrar: null,
+          emails: null,
           domainExpiryDate: null,
+          domainCreatedDate: null,
           domainUpdatedDate: new Date(),
+          lastRefreshedAt: null,
+          users: {
+            create: {
+              userId: BigInt(userId),
+            },
+          },
+        },
+        select: {
+          id: true,
+          name: true,
+          whoisResponse: true,
+          registrar: true,
+          emails: true,
+          domainExpiryDate: true,
+          domainCreatedDate: true,
+          domainUpdatedDate: true,
+          createdAt: true,
+          updatedAt: true,
+          lastRefreshedAt: true,
+          users: true,
         },
       });
       domainId = newDomain.id;
@@ -207,21 +248,6 @@ export class DomainService {
     } else {
       domainId = existingDomain.id;
     }
-
-    // Link domain to user
-    await prisma.userDomains.upsert({
-      where: {
-        userId_domainId: {
-          userId: BigInt(userId),
-          domainId,
-        },
-      },
-      create: {
-        userId: BigInt(userId),
-        domainId,
-      },
-      update: {}, // No updates needed if association exists
-    });
 
     // Return domain data
     const domain = await prisma.domain.findUnique({
@@ -235,14 +261,6 @@ export class DomainService {
     return serializeDomain(domain);
   }
 
-  // These methods were removed as they're duplicative of the functions in domain.model.ts
-
-  /**
-   * Fetch WHOIS data for a domain in the background and update the database
-   * This method is called after a domain is added to the database
-   * @param domainId The ID of the domain in the database
-   * @param domainName The domain name to fetch WHOIS data for
-   */
   /**
    * Delete a domain for a user
    * @param userId User ID
@@ -255,7 +273,7 @@ export class DomainService {
   ): Promise<void> {
     try {
       // Delete the user-domain association
-      await prisma.userDomains.delete({
+      await prisma.userDomain.delete({
         where: {
           userId_domainId: {
             userId: BigInt(userId),
@@ -265,7 +283,7 @@ export class DomainService {
       });
 
       // Check if any other users are tracking this domain
-      const otherUserTracking = await prisma.userDomains.findFirst({
+      const otherUserTracking = await prisma.userDomain.findFirst({
         where: {
           domainId: BigInt(domainId),
         },
@@ -297,7 +315,7 @@ export class DomainService {
 
       // Verify WHOIS API configuration
       if (!process.env.WHOIS_API_KEY) {
-        console.error('WHOIS_API_KEY environment variable is not set');
+        console.error("WHOIS_API_KEY environment variable is not set");
         return;
       }
 
@@ -312,8 +330,11 @@ export class DomainService {
       }
 
       // Get WHOIS information
-      const whoisInfo = await DomainLookupService.getDetailedWhoisInfo(domain.name);
-      const isRegistered = whoisInfo.status === true || whoisInfo.domain_registered === 'yes';
+      const whoisInfo = await DomainLookupService.getDetailedWhoisInfo(
+        domain.name
+      );
+      const isRegistered =
+        whoisInfo.status === true || whoisInfo.domain_registered === "yes";
 
       // Helper function to parse date strings
       const parseDate = (dateStr?: string | null): Date | null => {
@@ -331,9 +352,11 @@ export class DomainService {
       const domainCreatedDate = parseDate(whoisInfo.create_date as string);
 
       // Extract registrar information
-      const registrarInfo = typeof whoisInfo.domain_registrar === 'object' && whoisInfo.domain_registrar !== null
-        ? whoisInfo.domain_registrar as WhoisRegistrar
-        : {};
+      const registrarInfo =
+        typeof whoisInfo.domain_registrar === "object" &&
+        whoisInfo.domain_registrar !== null
+          ? (whoisInfo.domain_registrar as WhoisRegistrar)
+          : {};
       const registrarName = registrarInfo.registrar_name || null;
 
       // Log the data we're about to save
@@ -348,24 +371,36 @@ export class DomainService {
       const updatedDomain = await prisma.domain.update({
         where: { id: domainId },
         data: {
-          domainRegistered: isRegistered,
+          whoisResponse: whoisInfo || {},
+          registrar: registrarName,
+          emails: null,
           domainCreatedDate,
           domainExpiryDate,
+          domainUpdatedDate: new Date(),
           lastRefreshedAt: new Date(),
-          registrarName,
-          nameServers: Array.isArray(whoisInfo?.name_servers) ? whoisInfo.name_servers.filter(Boolean) : [],
-          response: whoisInfo || null,
+        },
+        select: {
+          id: true,
+          name: true,
+          whoisResponse: true,
+          registrar: true,
+          emails: true,
+          domainExpiryDate: true,
+          domainCreatedDate: true,
+          domainUpdatedDate: true,
+          createdAt: true,
+          updatedAt: true,
+          lastRefreshedAt: true,
+          users: true,
         },
       });
 
       console.log(`Successfully updated WHOIS data for ${domainName}:`, {
         id: updatedDomain.id,
         name: updatedDomain.name,
-        domainRegistered: updatedDomain.domainRegistered,
         domainCreatedDate: updatedDomain.domainCreatedDate,
         domainExpiryDate: updatedDomain.domainExpiryDate,
-        registrarName: updatedDomain.registrarName,
-        nameServers: updatedDomain.nameServers,
+        whoisResponse: updatedDomain.whoisResponse,
       });
     } catch (error) {
       console.error(`Error fetching WHOIS data for ${domainName}:`, error);
@@ -376,12 +411,16 @@ export class DomainService {
           data: {
             domainUpdatedDate: new Date(),
             lastRefreshedAt: new Date(),
-
-            response: { error: error instanceof Error ? error.message : 'Unknown error' }
+            whoisResponse: {
+              error: error instanceof Error ? error.message : "Unknown error",
+            },
           },
         });
       } catch (dbError) {
-        console.error(`Failed to update domain ${domainId} with error status:`, dbError);
+        console.error(
+          `Error updating domain ${domainName} with error state:`,
+          dbError
+        );
       }
     }
   }
@@ -416,7 +455,7 @@ export class DomainService {
 
         // Check if user already has this domain
         const existingUserDomain = existingDomain
-          ? await prisma.userDomains.findUnique({
+          ? await prisma.userDomain.findUnique({
               where: {
                 userId_domainId: {
                   userId: BigInt(userId),

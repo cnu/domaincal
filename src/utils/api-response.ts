@@ -11,12 +11,12 @@ export class ApiResponse {
    * @param message Optional success message
    * @param status HTTP status code (default: 200)
    */
-  static success<T>(data: T, message?: string, status = 200) {
+  static success<T>(data: T | null, message?: string, status = 200) {
     return NextResponse.json(
       {
         success: true,
         message,
-        data,
+        data: data || {},
       },
       { status }
     );

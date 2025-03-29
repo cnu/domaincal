@@ -56,10 +56,7 @@ export class AuthService {
     }
 
     // Update last login time
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    });
+    await prisma.$executeRaw`UPDATE "User" SET "lastLoginAt" = NOW() WHERE id = ${user.id}`;
 
     return serializeUser(user);
   }
@@ -81,7 +78,7 @@ export class AuthService {
           update: {},
         });
 
-        await prisma.userDomains.create({
+        await prisma.userDomain.create({
           data: {
             userId: BigInt(userId),
             domainId: domain.id,
