@@ -261,7 +261,7 @@ export class DomainLookupService {
           domain: {
             id: domainId || '0',
             name: 'Unknown',
-            whoisResponse: {},
+            response: {},
             registrar: null,
             emails: null,
             domainExpiryDate: null,
@@ -288,7 +288,7 @@ export class DomainLookupService {
           domain: {
             id: domainId,
             name: 'Unknown',
-            whoisResponse: {},
+            response: {},
             registrar: null,
             emails: null,
             domainExpiryDate: null,
@@ -317,7 +317,7 @@ export class DomainLookupService {
           domain: {
             id: domainId,
             name: 'Unknown',
-            whoisResponse: {},
+            response: {},
             registrar: null,
             emails: null,
             domainExpiryDate: null,
@@ -339,7 +339,7 @@ export class DomainLookupService {
           domain: {
             id: domainId,
             name: 'Unknown',
-            whoisResponse: {},
+            response: {},
             registrar: null,
             emails: null,
             domainExpiryDate: null,
@@ -363,10 +363,10 @@ export class DomainLookupService {
       if (!forceRefresh && domainWithRefresh.lastRefreshedAt) {
         const lastRefreshed = new Date(domainWithRefresh.lastRefreshedAt);
         // Use shorter cooldown if there's no WHOIS response or if the last attempt failed
-        const hasSuccessfulWhoisResponse = domainWithRefresh.whoisResponse &&
-          Object.keys(domainWithRefresh.whoisResponse).length > 0 &&
-          typeof domainWithRefresh.whoisResponse === 'object' &&
-          !('error' in domainWithRefresh.whoisResponse);
+        const hasSuccessfulWhoisResponse = domainWithRefresh.response &&
+          Object.keys(domainWithRefresh.response).length > 0 &&
+          typeof domainWithRefresh.response === 'object' &&
+          !('error' in domainWithRefresh.response);
         const cooldownPeriod = hasSuccessfulWhoisResponse
           ? 24 * 60 * 60 * 1000 // 24 hours in milliseconds for domains with successful WHOIS data
           : 5 * 1000; // 5 seconds for domains without data or with errors
@@ -376,7 +376,7 @@ export class DomainLookupService {
         if (now < cooldownEnds) {
           // Calculate time remaining in the cooldown period
           const timeRemaining = cooldownEnds.getTime() - now.getTime();
-          const hasWhoisResponse = domainWithRefresh.whoisResponse && Object.keys(domainWithRefresh.whoisResponse).length > 0;
+          const hasWhoisResponse = domainWithRefresh.response && Object.keys(domainWithRefresh.response).length > 0;
 
           let timeMessage: string;
           if (hasWhoisResponse) {
@@ -431,7 +431,7 @@ export class DomainLookupService {
             where: { id: BigInt(domainId) },
             data: {
               lastRefreshedAt: new Date(),
-              whoisResponse: whoisInfo,
+              response: whoisInfo,
               registrar: null,
               emails: null
             },
@@ -487,7 +487,7 @@ export class DomainLookupService {
       // Prepare update data with correct types
       const updateData = {
         // Store the complete response
-        whoisResponse: whoisInfo,
+        response: whoisInfo,
 
         // Registrar information
         registrar: registrar.registrar_name || undefined,
@@ -513,12 +513,12 @@ export class DomainLookupService {
           whoisInfo.expiry_date,
           whoisInfo.expiration_date,
           whoisInfo.expire_date,
-          // Check if there's an expiry date in the stored whoisResponse
-          typeof whoisInfo.whoisResponse === 'object' && whoisInfo.whoisResponse
+          // Check if there's an expiry date in the stored response
+          typeof whoisInfo.response === 'object' && whoisInfo.response
             ? (
-              (whoisInfo.whoisResponse as WhoisDateFields).expiry_date ||
-              (whoisInfo.whoisResponse as WhoisDateFields).expiration_date ||
-              (whoisInfo.whoisResponse as WhoisDateFields).expire_date
+              (whoisInfo.response as WhoisDateFields).expiry_date ||
+              (whoisInfo.response as WhoisDateFields).expiration_date ||
+              (whoisInfo.response as WhoisDateFields).expire_date
             )
             : undefined
         ),
@@ -549,7 +549,7 @@ export class DomainLookupService {
           domain: {
             id: domainId,
             name: 'Unknown',
-            whoisResponse: {},
+            response: {},
             registrar: null,
             emails: null,
             domainExpiryDate: null,

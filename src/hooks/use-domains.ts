@@ -67,29 +67,6 @@ export const useDomains = (
 ) => {
   const { data: session } = useSession();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  // Track when the window/tab regains focus to refresh data
-  React.useEffect(() => {
-    // Function to refresh domains when the window regains focus
-    const handleFocus = () => {
-      queryClient.invalidateQueries({ queryKey: domainKeys.lists() });
-    };
-
-    // Add event listeners for visibility change and focus
-    window.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") {
-        handleFocus();
-      }
-    });
-    window.addEventListener("focus", handleFocus);
-
-    // Clean up event listeners
-    return () => {
-      window.removeEventListener("visibilitychange", handleFocus);
-      window.removeEventListener("focus", handleFocus);
-    };
-  }, [queryClient]);
 
   const result = useQuery({
     queryKey: domainKeys.list({ refreshTrigger, page, limit, search }),
