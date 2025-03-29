@@ -5,6 +5,7 @@ import { Providers } from "./providers";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PendingDomainsHandler } from "@/components/pending-domains-handler";
+import { PostHogProvider } from "@/components/PostHogProvider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -37,11 +38,13 @@ export default function RootLayout({ children }: RootLayoutProps) {
           enableSystem
           disableTransitionOnChange
         >
-          <Providers>
-            {children}
-            <PendingDomainsHandler />
-            <Toaster />
-          </Providers>
+          <PostHogProvider>
+            <Providers>
+              {children}
+              <PendingDomainsHandler />
+              <Toaster />
+            </Providers>
+          </PostHogProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -42,3 +42,6 @@ next-env.d.ts
 
 # windsurf rules
 .windsurfrules
+
+.env
+.env.local
