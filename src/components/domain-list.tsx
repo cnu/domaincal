@@ -1,12 +1,7 @@
 "use client";
 
 import {
-  useState,
-  useMemo,
-  ChangeEvent,
-  useEffect,
-  useRef,
-  useCallback,
+  useState, useMemo, ChangeEvent, useEffect, useRef, useCallback
 } from "react";
 import { useSession } from "next-auth/react";
 import { format, formatDistanceToNow, isValid } from "date-fns";
@@ -20,12 +15,21 @@ import { DeleteDomainDialog } from "./delete-domain-dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { createLogger } from "@/lib/logger";
 
+// Constants
+const DOMAINS_PER_PAGE = 10;
+const MAX_RETRIES = 3; // Maximum number of retry attempts
+const MAX_AUTO_REFRESH_ATTEMPTS = 3; // Maximum auto-refresh attempts
+const COOLDOWN_DURATION = 60000; // 1 minute cooldown
+
 // Create a logger instance for this component
 const logger = createLogger("DomainList");
 
-interface DomainListProps {
-  refreshTrigger?: number;
-}
+type WhoisResponse = {
+  error?: string;
+  status?: boolean;
+  message?: string;
+  [key: string]: unknown;
+};
 
 interface Domain {
   id: string;
@@ -40,56 +44,150 @@ interface Domain {
   status?: string | null;
   onCooldown?: boolean;
   cooldownEndsAt?: string | Date | null;
-  response?: {
-    error?: string;
-    status?: boolean;
-    message?: string;
-    [key: string]: unknown;
-  } | null; // Response data from WHOIS API
+  response?: WhoisResponse | null;
 }
-const DOMAINS_PER_PAGE = 10;
 
-export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
+interface DomainListProps {
+  refreshTrigger?: number;
+}
+
+export function DomainList({ refreshTrigger = 0 }: DomainListProps): React.ReactElement {
   const { data: session } = useSession();
+  const queryClient = useQueryClient();
+  
+  // State hooks
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  // Track local refresh cooldowns
-  const [localCooldowns, setLocalCooldowns] = useState<Record<string, number>>(
-    {}
-  );
-
-  // Reference to store interval ID for cleaning up
+  const [localCooldowns, setLocalCooldowns] = useState<Record<string, number>>({});
+  
+  // Ref hooks
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  // Using useToast for domain-related notifications, managed by our hooks now
-
+  const pendingWhoisRef = useRef<boolean>(false);
+  const domainRetryCountsRef = useRef<Record<string, number>>({});
+  const autoRefreshAttemptsRef = useRef<number>(0);
+  const lastRefreshRef = useRef(Date.now());
+  
+  // Polling intervals (5s, 15s, 25s)
+  const POLLING_INTERVALS = useMemo(() => [5000, 15000, 25000], []);
+  
+  // Data fetching hooks
   const {
     data: domainData,
     isLoading: loading,
     refetch: fetchDomains,
   } = useDomains(refreshTrigger, currentPage, DOMAINS_PER_PAGE, searchQuery);
-
-  // Hook for refreshing domain information
+  
   const {
     mutate: refreshDomainMutation,
     isPending: isRefreshing,
     variables: currentRefreshingId,
   } = useRefreshDomain();
-
-  const domains = useMemo(
-    () => domainData?.domains || [],
-    [domainData?.domains]
-  );
+  
+  // Derived data
+  const domains = useMemo(() => domainData?.domains || [], [domainData?.domains]);
   const totalPages = domainData?.totalPages || 1;
   const totalDomains = domainData?.total || 0;
-
-  const fuse = useMemo(() => {
-    return new Fuse(domains, {
+  
+  // Search utility
+  const fuse = useMemo(() => 
+    new Fuse(domains, {
       keys: ["name"],
       threshold: 0.3,
       includeScore: true,
+    }), [domains]);
+
+  // Check if any domains are waiting for WHOIS data
+  const hasPendingWhoisLookups = useMemo(() => {
+    return domains.some((domain) => {
+      // If domain has an error, check if we've exceeded retry count
+      if (
+        "response" in domain &&
+        domain.response !== null &&
+        typeof domain.response === "object" &&
+        "error" in domain.response
+      ) {
+        // Get current retry count or initialize to 0
+        const retryCount = domainRetryCountsRef.current[domain.id] || 0;
+
+        // If we've already tried MAX_RETRIES times, don't retry again
+        if (retryCount >= MAX_RETRIES) {
+          logger.info(
+            `Skipping further refresh attempts for domain ${domain.name} after ${MAX_RETRIES} retries`
+          );
+          return false;
+        }
+
+        // Otherwise increment the retry count
+        domainRetryCountsRef.current[domain.id] = retryCount + 1;
+        logger.info(
+          `Domain ${domain.name} has error, retry attempt ${
+            retryCount + 1
+          }/${MAX_RETRIES}`
+        );
+        return true;
+      }
+
+      // If no expiry date, consider it pending
+      return !domain.domainExpiryDate;
     });
   }, [domains]);
+
+  // This variable is now defined at the top of the component
+
+  // Set up auto-refresh for domains with progressive polling intervals
+  useEffect(() => {
+    // Update the ref so we can check it in other effects
+    pendingWhoisRef.current = hasPendingWhoisLookups;
+
+    // Clear any existing interval first
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    // If we have pending lookups and haven't exceeded max attempts, schedule a poll
+    if (hasPendingWhoisLookups && autoRefreshAttemptsRef.current < MAX_AUTO_REFRESH_ATTEMPTS) {
+      // Calculate which poll interval to use based on current attempt number
+      const currentAttempt = autoRefreshAttemptsRef.current;
+      const waitTime = POLLING_INTERVALS[currentAttempt];
+
+      logger.info(
+        `Scheduling poll for domains with pending WHOIS data (attempt ${currentAttempt + 1}/${MAX_AUTO_REFRESH_ATTEMPTS}, waiting ${waitTime/1000}s)`
+      );
+
+      // Schedule the next poll after the appropriate wait time
+      intervalRef.current = setTimeout(() => {
+        // Only proceed if we haven't exceeded max attempts
+        if (autoRefreshAttemptsRef.current < MAX_AUTO_REFRESH_ATTEMPTS) {
+          logger.info(
+            `Polling domains for WHOIS updates (attempt ${currentAttempt + 1}/${MAX_AUTO_REFRESH_ATTEMPTS})`
+          );
+          
+          // Increment attempt counter for next time
+          autoRefreshAttemptsRef.current++;
+          
+          // Fetch the domains
+          fetchDomains();
+          
+          // Record the refresh time
+          lastRefreshRef.current = Date.now();
+        }
+      }, waitTime);
+    } else if (hasPendingWhoisLookups) {
+      // If we have pending lookups but reached max attempts, log it
+      logger.info(`Maximum auto-refresh attempts (${MAX_AUTO_REFRESH_ATTEMPTS}) reached. Stopping auto-refresh.`);
+    }
+
+    // Cleanup on unmount or re-run
+    return () => {
+      if (intervalRef.current) {
+        clearTimeout(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [hasPendingWhoisLookups, fetchDomains, POLLING_INTERVALS]);
+
 
   useEffect(() => {
     setIsSearching(!!searchQuery.trim());
@@ -129,7 +227,8 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     return totalPages;
   }, [isSearching, filteredDomains.length, totalPages]);
 
-  const handleDomainDeleted = () => {
+  // Memoize the domain deletion handler to avoid recreation on each render
+  const handleDomainDeleted = useCallback(() => {
     const newTotalDomains = totalDomains - 1;
     const newTotalPages = Math.max(
       1,
@@ -141,58 +240,59 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     } else {
       fetchDomains();
     }
-  };
+  }, [totalDomains, currentPage, fetchDomains]);
 
-  const handlePageChange = (page: number) => {
+  // Memoize the page change handler
+  const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page);
-  };
+  }, []);
 
   const handleSearch = (e: ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
     setCurrentPage(1);
   };
 
-  // Check if domain has a valid expiry date (but only if a lookup was attempted)
-  const hasValidExpiryDate = (domain: Domain): boolean => {
-    // If no refresh has been attempted yet, consider it valid (no error state)
-    if (!domain.lastRefreshedAt) return true;
+  // Domain status checking utility functions
+  const domainUtils = useMemo(() => ({
+    // Check if domain has a valid expiry date
+    hasValidExpiryDate: (domain: Domain): boolean => {
+      // If no refresh attempted yet, consider it valid (no error state)
+      if (!domain.lastRefreshedAt) return true;
+      if (!domain.domainExpiryDate) return false;
 
-    if (!domain.domainExpiryDate) return false;
+      try {
+        return isValid(new Date(domain.domainExpiryDate));
+      } catch {
+        return false;
+      }
+    },
 
-    try {
-      const expiryDate = new Date(domain.domainExpiryDate);
-      return isValid(expiryDate);
-    } catch {
+    // Check if domain has WHOIS API errors
+    hasWhoisApiError: (domain: Domain): boolean => {
+      // If no refresh attempted yet, don't consider it an error
+      if (!domain.lastRefreshedAt) return false;
+
+      // Check if response contains error
+      if (domain.response && typeof domain.response === "object") {
+        if ("error" in domain.response) return true;
+        if (domain.response.status === false) return true;
+        if (
+          domain.response.message &&
+          typeof domain.response.message === "string" &&
+          domain.response.message.toLowerCase().includes("error")
+        ) return true;
+      }
+
       return false;
-    }
-  };
+    },
 
-  // Check if domain has WHOIS API errors (but only if a lookup was attempted)
-  const hasWhoisApiError = (domain: Domain): boolean => {
-    // If no refresh has been attempted yet, don't consider it an error
-    if (!domain.lastRefreshedAt) return false;
-
-    // Check if response contains error
-    if (domain.response && typeof domain.response === "object") {
-      if ("error" in domain.response) return true;
-
-      // Check for API-specific error indicators
-      if (domain.response.status === false) return true;
-      if (
-        domain.response.message &&
-        typeof domain.response.message === "string" &&
-        domain.response.message.toLowerCase().includes("error")
-      )
-        return true;
-    }
-
-    return false;
-  };
-
-  // Determine if a domain needs its first WHOIS lookup
-  const needsFirstLookup = (domain: Domain): boolean => {
-    return !domain.lastRefreshedAt;
-  };
+    // Determine if domain needs first WHOIS lookup
+    needsFirstLookup: (domain: Domain): boolean => !domain.lastRefreshedAt,
+    
+    // Check if domain is on local cooldown
+    isLocallyOnCooldown: (domainId: string): boolean => 
+      Boolean(localCooldowns[domainId] && localCooldowns[domainId] > Date.now())
+  }), [localCooldowns]);
 
   // Setup an interval to check and clear cooldowns
   useEffect(() => {
@@ -230,36 +330,44 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     };
   }, [localCooldowns]);
 
-  const queryClient = useQueryClient();
-
   const refreshDomain = useCallback(
     (domain: Domain) => {
-      // Apply a local cooldown of 1 minute to prevent spamming
+      // Apply a local cooldown to prevent spamming
       setLocalCooldowns((prev) => ({
         ...prev,
-        [domain.id]: Date.now() + 60000, // 1 minute cooldown
+        [domain.id]: Date.now() + COOLDOWN_DURATION,
       }));
 
       // Call the mutation function from our hook
       refreshDomainMutation(domain.id, {
         // On success, refetch the domains list to update UI
         onSuccess: () => {
-          logger.info(`Domain refresh completed for ${domain.id}, refreshing UI`);
+          logger.info(
+            `Domain refresh completed for ${domain.id}, refreshing UI`
+          );
+          // Reset retry counter for this domain on successful refresh
+          if (domainRetryCountsRef.current[domain.id]) {
+            logger.info(
+              `Resetting retry counter for domain ${domain.name} after successful refresh`
+            );
+            delete domainRetryCountsRef.current[domain.id];
+          }
+
           // Force immediate refetch of the domains to update UI
           fetchDomains();
-          
+
           // Invalidate any domain-specific data if it exists in cache
           // This ensures we get fresh data when viewing domain details
           if (queryClient) {
             queryClient.invalidateQueries({
               queryKey: domainKeys.lookupById(domain.id),
-              refetchType: 'all',
+              refetchType: "all",
             });
-            
+
             // Invalidate all domain lists to ensure updated data is shown
             queryClient.invalidateQueries({
               queryKey: domainKeys.lists(),
-              refetchType: 'all',
+              refetchType: "all",
             });
           }
         },
@@ -268,16 +376,12 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
     [refreshDomainMutation, fetchDomains, queryClient]
   );
 
-  const isLocallyOnCooldown = (domainId: string): boolean => {
-    return Boolean(
-      localCooldowns[domainId] && localCooldowns[domainId] > Date.now()
-    );
-  };
+  // Now defined in domainUtils
 
   // Effect to automatically refresh domains that have never been looked up
   useEffect(() => {
     // Look for domains that need their first WHOIS lookup
-    const domainsNeedingFirstLookup = domains.filter(needsFirstLookup);
+    const domainsNeedingFirstLookup = domains.filter(domainUtils.needsFirstLookup);
 
     if (domainsNeedingFirstLookup.length > 0) {
       logger.info(
@@ -293,18 +397,45 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
         }, index * 2000); // 2 second delay between each request
       });
     }
-  }, [domains, refreshDomain]); // Run this effect when the domains data changes
+  }, [domains, refreshDomain, domainUtils]); // Run this effect when the domains data changes
 
-  const renderDomainItem = (domain: Domain) => {
-    const invalidExpiry = !hasValidExpiryDate(domain);
-    const hasApiError = hasWhoisApiError(domain);
+  // Optimized renderDomainItem with clearer code organization
+  // Render a single domain item - memoized to prevent unnecessary re-renders
+  const renderDomainItem = useCallback((domain: Domain) => {
+    // Status checks
+    const invalidExpiry = !domainUtils.hasValidExpiryDate(domain);
+    const hasApiError = domainUtils.hasWhoisApiError(domain);
     const needsRefresh = invalidExpiry || hasApiError;
     const isRefreshingThis = isRefreshing && currentRefreshingId === domain.id;
 
-    // First check local cooldown (client-side), then check server-reported cooldown
-    const onCooldown =
-      isLocallyOnCooldown(domain.id) || (domain.onCooldown && !needsRefresh); // Override server cooldown if we need a refresh
-
+    // Cooldown logic - override server cooldown if refresh is needed
+    const onCooldown = 
+      domainUtils.isLocallyOnCooldown(domain.id) || (domain.onCooldown && !needsRefresh);
+      
+    // Button status and tooltip text
+    const buttonVariant = needsRefresh ? "default" : onCooldown ? "secondary" : "outline";
+    const buttonDisabled = isRefreshingThis || (onCooldown && !needsRefresh);
+    const buttonTooltip = isRefreshingThis
+      ? "Refreshing domain information..."
+      : domainUtils.isLocallyOnCooldown(domain.id)
+      ? `Refresh on cooldown for ${Math.ceil(COOLDOWN_DURATION/1000)} seconds`
+      : domain.onCooldown && domain.cooldownEndsAt && !needsRefresh
+      ? `Refresh on cooldown until ${new Date(domain.cooldownEndsAt).toLocaleString()}`
+      : needsRefresh
+      ? "Refresh recommended due to error or missing data"
+      : "Refresh domain information";
+    
+    // Icon styling
+    const iconClassName = `h-4 w-4 ${
+      isRefreshingThis
+        ? "animate-spin"
+        : needsRefresh
+        ? "text-amber-500"
+        : onCooldown
+        ? "text-muted-foreground"
+        : ""
+    }`;
+    
     return (
       <div
         key={domain.id}
@@ -317,7 +448,7 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
             }`}
           >
             <div className="text-center">
-              {hasValidExpiryDate(domain) ? (
+              {domainUtils.hasValidExpiryDate(domain) ? (
                 <>
                   <div className="text-sm">
                     {format(new Date(domain.domainExpiryDate!), "dd MMM")}
@@ -366,38 +497,14 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
         </div>
         <div className="flex items-center space-x-2">
           <Button
-            variant={
-              needsRefresh ? "default" : onCooldown ? "secondary" : "outline"
-            }
+            variant={buttonVariant}
             size="icon"
             onClick={() => refreshDomain(domain)}
-            disabled={isRefreshingThis || (onCooldown && !needsRefresh)}
-            title={
-              isRefreshingThis
-                ? "Refreshing domain information..."
-                : isLocallyOnCooldown(domain.id)
-                ? `Refresh on cooldown for 1 minute`
-                : domain.onCooldown && domain.cooldownEndsAt && !needsRefresh
-                ? `Refresh on cooldown until ${new Date(
-                    domain.cooldownEndsAt
-                  ).toLocaleString()}`
-                : needsRefresh
-                ? "Refresh recommended due to error or missing data"
-                : "Refresh domain information"
-            }
+            disabled={buttonDisabled}
+            title={buttonTooltip}
             className={onCooldown && !needsRefresh ? "opacity-60" : ""}
           >
-            <RefreshCw
-              className={`h-4 w-4 ${
-                isRefreshingThis
-                  ? "animate-spin"
-                  : needsRefresh
-                  ? "text-amber-500"
-                  : onCooldown
-                  ? "text-muted-foreground"
-                  : ""
-              }`}
-            />
+            <RefreshCw className={iconClassName} />
           </Button>
           <DeleteDomainDialog
             domainId={domain.id}
@@ -407,9 +514,9 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
         </div>
       </div>
     );
-  };
+  }, [domainUtils, isRefreshing, currentRefreshingId, refreshDomain, handleDomainDeleted]);
 
-  const renderPagination = () => {
+  const renderPagination = useCallback(() => {
     const totalPagesToUse = isSearching ? calculatedTotalPages : totalPages;
     const maxPagesToShow = 5;
     let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
@@ -486,10 +593,12 @@ export function DomainList({ refreshTrigger = 0 }: DomainListProps) {
         </Button>
       </div>
     );
-  };
+  }, [currentPage, isSearching, calculatedTotalPages, totalPages, handlePageChange]);
 
+  // Final render with null check for session
   if (!session?.user) {
-    return null;
+    // Return empty fragment instead of null to satisfy React.ReactElement type
+    return <></>; 
   }
 
   return (

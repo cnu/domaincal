@@ -47,6 +47,8 @@ export default function Home() {
     try {
       await loginMutation.mutateAsync({ email, password });
       setIsAuthOpen(false);
+      // Trigger a refresh of the domain list after login
+      setRefreshDomainList((prev) => prev + 1);
     } catch (error) {
       // Error handling is done in the mutation
       throw error; // Re-throw to prevent onSuccess from being called
@@ -60,6 +62,8 @@ export default function Home() {
     try {
       await registerMutation.mutateAsync({ email, password });
       setIsAuthOpen(false);
+      // Trigger a refresh of the domain list after registration
+      setRefreshDomainList((prev) => prev + 1);
     } catch (error) {
       // Error handling is done in the mutation
       throw error; // Re-throw to prevent onSuccess from being called
@@ -88,9 +92,8 @@ export default function Home() {
       await addDomainsMutation.mutateAsync(domains);
       // Trigger a refresh of the domain list
       setRefreshDomainList((prev) => prev + 1);
-    } catch (error) {
+    } catch {
       // Error handling is done in the mutation
-      console.error("Domain submission error:", error);
     }
   };
 
