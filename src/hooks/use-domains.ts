@@ -41,18 +41,21 @@ interface DomainSubmitResponse {
 
 // Query key factory for domains
 export const domainKeys = {
-  all: ["domains"] as const,
-  lists: () => [...domainKeys.all, "list"] as const,
-  list: (filters: {
-    refreshTrigger?: number;
-    page?: number;
-    limit?: number;
-    search?: string;
-  }) => [...domainKeys.lists(), filters] as const,
-  details: () => [...domainKeys.all, "detail"] as const,
-  detail: (id: string) => [...domainKeys.details(), id] as const,
-  lookup: () => [...domainKeys.all, "lookup"] as const,
-  lookupById: (id: string) => [...domainKeys.lookup(), id] as const,
+  all: (userId?: string) => ["domains", userId] as const,
+  lists: (userId?: string) => [...domainKeys.all(userId), "list"] as const,
+  list: (
+    userId?: string,
+    filters?: {
+      refreshTrigger?: number;
+      page?: number;
+      limit?: number;
+      search?: string;
+    }
+  ) => [...domainKeys.lists(userId), filters] as const,
+  details: (userId?: string) => [...domainKeys.all(userId), "detail"] as const,
+  detail: (userId?: string, id?: string) => [...domainKeys.details(userId), id] as const,
+  lookup: (userId?: string) => [...domainKeys.all(userId), "lookup"] as const,
+  lookupById: (userId?: string, id?: string) => [...domainKeys.lookup(userId), id] as const,
 };
 
 /**
@@ -67,9 +70,10 @@ export const useDomains = (
 ) => {
   const { data: session } = useSession();
   const { toast } = useToast();
+  const userId = session?.user?.id as string | undefined;
 
   const result = useQuery({
-    queryKey: domainKeys.list({ refreshTrigger, page, limit, search }),
+    queryKey: domainKeys.list(userId, { refreshTrigger, page, limit, search }),
     queryFn: async () => {
       if (!session?.user) {
         return {
@@ -161,6 +165,9 @@ export function useRefreshDomain() {
     message?: string;
   }
 
+  const { data: session } = useSession();
+  const userId = session?.user?.id as string | undefined;
+
   return useMutation<DomainRefreshResponse, Error, string>({
     mutationFn: async (domainId: string) => {
       // Validate input
@@ -178,9 +185,9 @@ export function useRefreshDomain() {
     onSuccess: (data, domainId) => {
       // Invalidate queries to trigger refetch
       queryClient.invalidateQueries({
-        queryKey: domainKeys.lookupById(domainId),
+        queryKey: domainKeys.lookupById(userId, domainId),
       });
-      queryClient.invalidateQueries({ queryKey: domainKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: domainKeys.lists(userId) });
 
       // Show success toast
       toast({
@@ -216,6 +223,8 @@ export function useRefreshDomain() {
 export function useAddDomains() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: session } = useSession();
+  const userId = session?.user?.id as string | undefined;
 
   return useMutation<DomainSubmitResponse, Error, string[]>({
     mutationFn: async (domains: string[]) => {
@@ -239,7 +248,7 @@ export function useAddDomains() {
     },
     onMutate: async (domains) => {
       // Cancel any outgoing refetches to avoid overwriting our optimistic update
-      await queryClient.cancelQueries({ queryKey: domainKeys.lists() });
+      await queryClient.cancelQueries({ queryKey: domainKeys.lists(userId) });
 
       // Return context with the domains being added for potential rollback
       return { domains };
@@ -288,7 +297,7 @@ export function useAddDomains() {
       }
 
       // Invalidate domains query to refresh the list
-      queryClient.invalidateQueries({ queryKey: domainKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: domainKeys.lists(userId) });
     },
     onError: (error: Error) => {
       toast({
@@ -308,6 +317,8 @@ export function useAddDomains() {
 export function useDeleteDomain() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: session } = useSession();
+  const userId = session?.user?.id as string | undefined;
 
   return useMutation({
     mutationFn: async (domainId: string) => {
@@ -342,7 +353,7 @@ export function useDeleteDomain() {
       });
 
       // Invalidate domains query to refresh the list
-      queryClient.invalidateQueries({ queryKey: domainKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: domainKeys.lists(userId) });
     },
     onError: (error: Error) => {
       const id = uuidv4();
@@ -363,6 +374,8 @@ export function useDeleteDomain() {
 export function useRefreshDomainWhois() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: session } = useSession();
+  const userId = session?.user?.id as string | undefined;
 
   interface DomainLookupResponse {
     domain?: {
@@ -388,12 +401,12 @@ export function useRefreshDomainWhois() {
     onMutate: async ({ domainId }) => {
       // Cancel any outgoing refetches to avoid overwriting our optimistic update
       await queryClient.cancelQueries({
-        queryKey: domainKeys.detail(domainId),
+        queryKey: domainKeys.detail(userId, domainId),
       });
-      await queryClient.cancelQueries({ queryKey: domainKeys.lists() });
+      await queryClient.cancelQueries({ queryKey: domainKeys.lists(userId) });
 
       // Get the current domain data for potential rollback
-      const previousDomains = queryClient.getQueryData(domainKeys.lists());
+      const previousDomains = queryClient.getQueryData(domainKeys.lists(userId));
 
       // Return context with the previous data
       return { previousDomains, domainId } as {
@@ -412,8 +425,8 @@ export function useRefreshDomainWhois() {
       });
 
       // Invalidate specific queries to refresh the data
-      queryClient.invalidateQueries({ queryKey: domainKeys.detail(domainId) });
-      queryClient.invalidateQueries({ queryKey: domainKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: domainKeys.detail(userId, domainId) });
+      queryClient.invalidateQueries({ queryKey: domainKeys.lists(userId) });
     },
     onError: (error: Error, params, context: unknown) => {
       // Get domainId from params for error handling and recovery
@@ -427,13 +440,13 @@ export function useRefreshDomainWhois() {
       // If we have previous domain data, restore it on error
       if (typedContext && typedContext.previousDomains) {
         queryClient.setQueryData(
-          domainKeys.lists(),
+          domainKeys.lists(userId),
           typedContext.previousDomains
         );
       }
 
       // Invalidate any queries related to this specific domain
-      queryClient.invalidateQueries({ queryKey: domainKeys.detail(domainId) });
+      queryClient.invalidateQueries({ queryKey: domainKeys.detail(userId, domainId) });
 
       // Check if this is a timeout error
       const isTimeoutError =
@@ -452,7 +465,7 @@ export function useRefreshDomainWhois() {
     },
     onSettled: (data, error, { domainId }) => {
       // Always invalidate queries after settled (success or error)
-      queryClient.invalidateQueries({ queryKey: domainKeys.detail(domainId) });
+      queryClient.invalidateQueries({ queryKey: domainKeys.detail(userId, domainId) });
     },
   });
 }

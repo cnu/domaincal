@@ -6,8 +6,13 @@ import {
   sanitizeDomain,
   processDomainList,
 } from "@/models/domain.model";
-import { DomainLookupService } from "@/services/domain-lookup.service";
-import type { WhoisRegistrar } from "@/services/domain-lookup.service";
+import {
+  DomainLookupService,
+  WhoisRegistrar,
+} from "@/services/domain-lookup.service";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("DomainService");
 export class DomainService {
   /**
    * Get all domains for a user
@@ -261,179 +266,6 @@ export class DomainService {
   }
 
   /**
-   * Delete a domain for a user
-   * @param userId User ID
-   * @param domainId Domain ID
-   * @returns void
-   */
-  static async deleteDomainForUser(
-    userId: string,
-    domainId: string
-  ): Promise<void> {
-    try {
-      console.log("Attempting to delete domain:", { userId, domainId });
-
-      // First check if the user-domain association exists
-      const userDomain = await prisma.userDomain.findUnique({
-        where: {
-          userId_domainId: {
-            userId: BigInt(userId),
-            domainId: BigInt(domainId),
-          },
-        },
-      });
-
-      console.log("Found user domain:", userDomain);
-
-      if (!userDomain) {
-        throw new Error("Domain not found or not owned by user");
-      }
-
-      // Delete the user-domain association
-      await prisma.userDomain.delete({
-        where: {
-          userId_domainId: {
-            userId: BigInt(userId),
-            domainId: BigInt(domainId),
-          },
-        },
-      });
-
-      console.log("Deleted user domain association");
-    } catch (error) {
-      console.error(
-        `Error deleting domain ${domainId} for user ${userId}:`,
-        error
-      );
-      throw error;
-    }
-  }
-
-  static async fetchWhoisDataInBackground(
-    domainId: bigint,
-    domainName: string
-  ): Promise<void> {
-    try {
-      console.log(`Fetching WHOIS data in background for ${domainName}`);
-
-      // Verify WHOIS API configuration
-      if (!process.env.WHOIS_API_KEY) {
-        console.error("WHOIS_API_KEY environment variable is not set");
-        return;
-      }
-
-      // Check if domain exists
-      const domain = await prisma.domain.findUnique({
-        where: { id: domainId },
-      });
-
-      if (!domain) {
-        console.error(`Domain ${domainId} not found`);
-        return;
-      }
-
-      // Get WHOIS information
-      const whoisInfo = await DomainLookupService.getDetailedWhoisInfo(
-        domain.name
-      );
-      const isRegistered =
-        whoisInfo.status === true || whoisInfo.domain_registered === "yes";
-
-      // Helper function to parse date strings
-      const parseDate = (dateStr?: string | null): Date | null => {
-        if (!dateStr) return null;
-        try {
-          const date = new Date(dateStr);
-          return isNaN(date.getTime()) ? null : date;
-        } catch {
-          return null;
-        }
-      };
-
-      // Parse dates from WHOIS response
-      const domainExpiryDate = parseDate(whoisInfo.expiry_date as string);
-      const domainCreatedDate = parseDate(whoisInfo.create_date as string);
-
-      // Extract registrar information
-      const registrarInfo =
-        typeof whoisInfo.domain_registrar === "object" &&
-        whoisInfo.domain_registrar !== null
-          ? (whoisInfo.domain_registrar as WhoisRegistrar)
-          : {};
-      const registrarName = registrarInfo.registrar_name || null;
-
-      // Log the data we're about to save
-      console.log(`Updating domain ${domainName} with WHOIS data:`, {
-        domainRegistered: isRegistered,
-        domainCreatedDate,
-        domainExpiryDate,
-        registrarName,
-      });
-
-      // Update domain in database
-      const updatedDomain = await prisma.domain.update({
-        where: { id: domainId },
-        data: {
-          response: JSON.parse(
-            JSON.stringify({
-              ...whoisInfo,
-              domain_registered: isRegistered ? "yes" : "no",
-            })
-          ),
-          registrar: registrarName,
-          emails: null,
-          domainExpiryDate,
-          domainCreatedDate,
-          domainUpdatedDate: new Date(),
-          lastRefreshedAt: new Date(),
-        },
-        select: {
-          id: true,
-          name: true,
-          response: true,
-          registrar: true,
-          emails: true,
-          domainExpiryDate: true,
-          domainCreatedDate: true,
-          domainUpdatedDate: true,
-          createdAt: true,
-          updatedAt: true,
-          lastRefreshedAt: true,
-          users: true,
-        },
-      });
-
-      console.log(`Successfully updated WHOIS data for ${domainName}:`, {
-        id: updatedDomain.id,
-        name: updatedDomain.name,
-        domainCreatedDate: updatedDomain.domainCreatedDate,
-        domainExpiryDate: updatedDomain.domainExpiryDate,
-        response: updatedDomain.response,
-      });
-    } catch (error) {
-      console.error(`Error fetching WHOIS data for ${domainName}:`, error);
-      // Update domain with error status
-      try {
-        await prisma.domain.update({
-          where: { id: domainId },
-          data: {
-            domainUpdatedDate: new Date(),
-            lastRefreshedAt: new Date(),
-            response: {
-              error: error instanceof Error ? error.message : "Unknown error",
-            },
-          },
-        });
-      } catch (dbError) {
-        console.error(
-          `Error updating domain ${domainName} with error state:`,
-          dbError
-        );
-      }
-    }
-  }
-
-  /**
    * Process multiple domains for a user
    * @param userId User ID
    * @param domainNames Array of domain names
@@ -484,8 +316,7 @@ export class DomainService {
         const addedDomain = await this.addDomainForUser(userId, domain);
         added.push(addedDomain);
       } catch (error) {
-        console.error(`Error adding domain ${domain}:`, error);
-        invalidDomains.push(domain);
+        logger.error(`Error adding domain ${domain}:`, error);        invalidDomains.push(domain);
       }
     }
 
@@ -494,5 +325,147 @@ export class DomainService {
       invalid: invalidDomains,
       duplicates: [...duplicates, ...dbDuplicates],
     };
+  }
+
+  /**
+   * Delete a domain for a user
+   * @param userId User ID
+   * @param domainId Domain ID
+   * @returns void
+   */
+  static async deleteDomainForUser(
+    userId: string,
+    domainId: string
+  ): Promise<void> {
+    try {
+      logger.info("Attempting to delete domain:", { userId, domainId });
+
+      // First check if the user-domain association exists
+      const userDomain = await prisma.userDomain.findUnique({
+        where: {
+          userId_domainId: {
+            userId: BigInt(userId),
+            domainId: BigInt(domainId),
+          },
+        },
+      });
+
+      logger.info("Found user domain:", userDomain);
+
+      if (!userDomain) {
+        throw new Error("Domain not found or not owned by user");
+      }
+
+      // Delete the user-domain association
+      await prisma.userDomain.delete({
+        where: {
+          userId_domainId: {
+            userId: BigInt(userId),
+            domainId: BigInt(domainId),
+          },
+        },
+      });
+
+      logger.info("Deleted user domain association");
+    } catch (error) {
+      logger.error(
+        `Error deleting domain ${domainId} for user ${userId}:`,
+        error
+      );
+      throw error;
+    }
+  }
+
+  static async fetchWhoisDataInBackground(
+    domainId: bigint,
+    domainName: string
+  ): Promise<void> {
+    try {
+      logger.info(`Queueing WHOIS data fetch for ${domainName}`);
+
+      // Queue the WHOIS lookup by calling the background API
+      // Instead of using fetch directly, use the DomainLookupService to directly update the domain
+      try {
+        // Mark the domain as refreshing
+        await prisma.domain.update({
+          where: { id: domainId },
+          data: { lastRefreshedAt: new Date() },
+        });
+
+        // Get the domain details
+        const domain = await prisma.domain.findUnique({
+          where: { id: domainId },
+        });
+
+        if (!domain) {
+          throw new Error(`Domain with ID ${domainId} not found`);
+        }
+
+        // Get WHOIS info directly using the service
+        const whoisInfo = await DomainLookupService.getDetailedWhoisInfo(
+          domain.name
+        );
+
+        // Update domain with WHOIS data
+        await prisma.domain.update({
+          where: { id: domainId },
+          data: {
+            response: whoisInfo,
+            registrar:
+              typeof whoisInfo.domain_registrar === "object" &&
+              whoisInfo.domain_registrar !== null
+                ? (whoisInfo.domain_registrar as WhoisRegistrar)
+                    .registrar_name || null
+                : null,
+            domainExpiryDate: whoisInfo.expiry_date
+              ? new Date(whoisInfo.expiry_date)
+              : null,
+            domainCreatedDate: whoisInfo.creation_date
+              ? new Date(whoisInfo.creation_date)
+              : null,
+            domainUpdatedDate: whoisInfo.updated_date
+              ? new Date(whoisInfo.updated_date)
+              : null,
+          },
+        });
+
+        logger.info(`Successfully processed WHOIS lookup for ${domainName}`);
+        return;
+      } catch (directError) {
+        logger.error(`Error in direct WHOIS processing:`, directError);        // Update domain with error status
+        await prisma.domain.update({
+          where: { id: domainId },
+          data: {
+            response: {
+              error:
+                directError instanceof Error
+                  ? directError.message
+                  : "Unknown error processing WHOIS data",
+            },
+          },
+        });
+        return;
+      }
+    } catch (error) {
+      logger.error(`Error queueing WHOIS lookup for ${domainName}:`, error);
+      // Update domain with error status
+      try {
+        await prisma.domain.update({
+          where: { id: domainId },
+          data: {
+            domainUpdatedDate: new Date(),
+            lastRefreshedAt: new Date(),
+            response: {
+              error: error instanceof Error ? error.message : "Unknown error",
+            },
+          },
+        });
+      } catch (dbError) {
+        logger.error(
+          `Error updating domain ${domainName} with error state:`,
+          dbError
+        );
+      }
+    }
   }
 }

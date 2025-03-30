@@ -22,6 +22,15 @@ export function Nav() {
   }
 
   const handleLogout = async () => {
+    // Clear all user and domain data from local storage before logout
+    localStorage.clear();
+    
+    // You can also use more specific clearing if needed:
+    // localStorage.removeItem('next-auth.session-token');
+    // localStorage.removeItem('domaincal-user-data');
+    // localStorage.removeItem('domaincal-domains-data');
+    
+    // Log the user out
     await signOut({ redirect: false })
   }
 

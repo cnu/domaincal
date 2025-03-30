@@ -133,7 +133,6 @@ export function DomainInput({ onSubmit, isLoading }: DomainInputProps) {
 
     // Get domain count first to check if over limit
     const domainCount = getDomainCount();
-    // console.log(`Submitting form with ${domainCount} domains`);
 
     if (domainCount > MAX_DOMAINS) {
       toast({
@@ -146,9 +145,6 @@ export function DomainInput({ onSubmit, isLoading }: DomainInputProps) {
     }
 
     const { domains, errors } = parseDomains(value);
-    // console.log(
-    //   `Parsed ${domains.length} valid domains with ${errors.length} errors`
-    // );
 
     if (errors.length > 0) {
       toast({

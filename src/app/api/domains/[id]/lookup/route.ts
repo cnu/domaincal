@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { DomainController } from "@/controllers/domain.controller";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("DomainLookupRoute");
 
 /**
  * POST handler to trigger a domain refresh
@@ -20,7 +23,7 @@ export async function POST(
     return await DomainController.refreshDomain(domainId);
   } catch (error) {
     // Handle any unexpected errors not caught by the controller
-    console.error("Unexpected error in domain refresh route:", error);
+    logger.error("Unexpected error in domain refresh route:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     
     return NextResponse.json(

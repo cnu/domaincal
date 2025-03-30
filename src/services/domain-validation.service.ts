@@ -1,5 +1,8 @@
 import * as psl from "psl";
 import normalizeUrl from "normalize-url";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("DomainValidationService");
 
 /**
  * Common subdomains that should be stripped when extracting the root domain
@@ -71,7 +74,7 @@ export class DomainValidationService {
         normalizedDomain = normalizedUrl;
       } catch (error) {
         // If normalize-url fails, continue with basic normalization
-        console.warn(
+        logger.warn(
           "URL normalization failed, continuing with basic normalization",
           error
         );
@@ -110,7 +113,7 @@ export class DomainValidationService {
       // Return the parsed domain if no subdomain
       return parsed.domain;
     } catch (error) {
-      console.error("Domain sanitization error:", error);
+      logger.error("Domain sanitization error:", error);
       return null;
     }
   }

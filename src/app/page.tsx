@@ -73,9 +73,6 @@ export default function Home() {
       return;
     }
 
-    // Log the domains being submitted
-    // console.log(`Submitting ${domains.length} domains:`, domains);
-
     if (domains.length > 20) {
       const id = uuidv4();
       toast({
