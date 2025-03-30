@@ -8,6 +8,7 @@ import { PendingDomainsHandler } from "@/components/pending-domains-handler";
 import { PostHogProvider } from "@/components/PostHogProvider";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import EmailVerificationBannerWrapper from "@/components/EmailVerificationBannerWrapper";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
           {process.env.NODE_ENV === "production" ? (
             <PostHogProvider>
               <Providers>
+                <EmailVerificationBannerWrapper />
                 {children}
                 <PendingDomainsHandler />
                 <Toaster />
@@ -52,6 +54,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
             </PostHogProvider>
           ) : (
             <Providers>
+              <EmailVerificationBannerWrapper />
               {children}
               <PendingDomainsHandler />
               <Toaster />

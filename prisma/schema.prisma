@@ -8,13 +8,15 @@ datasource db {
 }
 
 model User {
-  id          BigInt        @id @default(autoincrement())
-  email       String        @unique
-  password    String
-  lastLoginAt DateTime?     @map("last_login_at")
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime?     @updatedAt @map("updated_at")
-  domains     UserDomain[]
+  id                BigInt        @id @default(autoincrement())
+  email             String        @unique
+  password          String
+  emailVerified     Boolean       @default(false) @map("email_verified")
+  verificationToken String?       @unique @map("verification_token")
+  lastLoginAt       DateTime?     @map("last_login_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime?     @updatedAt @map("updated_at")
+  domains           UserDomain[]
 
   @@index([email])
   @@map("users")

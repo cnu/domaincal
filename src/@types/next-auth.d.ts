@@ -5,14 +5,14 @@ declare module 'next-auth' {
   interface User {
     id: string;
     email: string;
-    emailVerified?: boolean;
+    emailVerified: boolean;
   }
 
   interface Session {
     user: {
       id: string;
       email: string;
-      emailVerified?: boolean;
+      emailVerified: boolean;
     };
   }
 }
@@ -21,6 +21,6 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     email: string;
-    emailVerified?: boolean;
+    emailVerified: boolean;
   }
 }

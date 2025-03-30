@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { serializeUser, UserResponse } from "@/models/user.model";
 import { hash, compare } from "bcryptjs";
+import { emailVerificationService } from "@/services/email-verification.service";
 
 export class AuthService {
   /**
@@ -30,6 +31,18 @@ export class AuthService {
         password: hashedPassword,
       },
     });
+
+    // Send verification email
+    try {
+      await emailVerificationService.sendVerificationEmail({
+        userId: user.id.toString(),
+        email: user.email,
+      });
+    } catch (error) {
+      console.error("Failed to send verification email during registration:", error);
+      // Continue with registration even if email sending fails
+      // We don't want to block registration due to email service issues
+    }
 
     return serializeUser(user);
   }

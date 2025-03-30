@@ -50,6 +50,7 @@ const handler = NextAuth({
           return {
             id: user.id.toString(),
             email: user.email,
+            emailVerified: user.emailVerified,
           };
         } catch (error) {
           console.error("Auth error:", error);
@@ -70,6 +71,8 @@ const handler = NextAuth({
       if (user) {
         token.id = user.id;
         token.email = user.email;
+        // Ensure emailVerified is always a boolean
+        token.emailVerified = !!user.emailVerified;
       }
       return token;
     },
@@ -78,6 +81,7 @@ const handler = NextAuth({
         session.user = {
           id: token.id as string,
           email: token.email as string,
+          emailVerified: !!token.emailVerified,
         };
       }
       return session;
