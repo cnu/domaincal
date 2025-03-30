@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DomainController } from "@/controllers/domain.controller";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("DomainsApiRoute");
 
 /**
  * GET handler for retrieving domains
@@ -22,7 +25,7 @@ export async function GET(request: NextRequest) {
     // For simple domain retrieval without pagination, use the controller
     return DomainController.getUserDomains();
   } catch (error) {
-    console.error("Error in domains GET route:", error);
+    logger.error("Error in domains GET route:", error);
 
     return NextResponse.json(
       { error: "Failed to retrieve domains" },
@@ -57,7 +60,7 @@ export async function POST(request: NextRequest) {
     // Delegate to controller for domain processing
     return DomainController.addDomains(domainList);
   } catch (error) {
-    console.error("Error in domains POST route:", error);
+    logger.error("Error in domains POST route:", error);
 
     return NextResponse.json(
       { error: "Failed to process domain request" },

@@ -38,13 +38,21 @@ export default function RootLayout({ children }: RootLayoutProps) {
           enableSystem
           disableTransitionOnChange
         >
-          <PostHogProvider>
+          {process.env.NODE_ENV === "production" ? (
+            <PostHogProvider>
+              <Providers>
+                {children}
+                <PendingDomainsHandler />
+                <Toaster />
+              </Providers>
+            </PostHogProvider>
+          ) : (
             <Providers>
               {children}
               <PendingDomainsHandler />
               <Toaster />
             </Providers>
-          </PostHogProvider>
+          )}
         </ThemeProvider>
       </body>
     </html>

@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
 import { DomainService } from "@/services/domain.service";
-import { DomainLookupService, type WhoisQueryResponse, type WhoisDateFields } from "@/services/domain-lookup.service";
+import {
+  DomainLookupService,
+  type WhoisQueryResponse,
+  type WhoisDateFields,
+} from "@/services/domain-lookup.service";
 import { prisma } from "@/lib/prisma";
 import { Domain } from "@prisma/client";
+import { createLogger } from "@/lib/logger";
+
+const logger = createLogger("WhoisTestApiRoute");
 
 interface ApiResponse {
   success: boolean;
@@ -21,7 +28,7 @@ export async function GET() {
     // Check if WHOIS API key is configured
     const apiKey = process.env.WHOIS_API_KEY;
     if (!apiKey) {
-      console.error("WHOIS API key is not configured");
+      logger.error("WHOIS API key is not configured");
       const response: ApiResponse = {
         success: false,
         error: "WHOIS API key is not configured",
@@ -34,34 +41,40 @@ export async function GET() {
     }
 
     // First test the WHOIS API directly
-    console.log(`Testing WHOIS API for ${testDomain}...`);
+    logger.info(`Testing WHOIS API for ${testDomain}...`);
     let whoisInfo;
     try {
       whoisInfo = await DomainLookupService.getDetailedWhoisInfo(testDomain);
       if (!whoisInfo) {
         throw new Error("WHOIS API returned null response");
       }
-      console.log("Raw WHOIS response:", JSON.stringify(whoisInfo, null, 2));
-      
+      logger.info("Raw WHOIS response:", JSON.stringify(whoisInfo, null, 2));
+
       // Check all possible expiry date fields
       const whoisResponse = whoisInfo as WhoisQueryResponse;
-      
+
       // Helper function to safely get date from response
       const getDateFromResponse = (response: WhoisDateFields | undefined) => {
         if (!response) return undefined;
-        return response.expiry_date || response.expiration_date || response.expire_date;
+        return (
+          response.expiry_date ||
+          response.expiration_date ||
+          response.expire_date
+        );
       };
 
       // Get dates from all possible locations
       const rootDate = getDateFromResponse(whoisResponse);
       const registryDate = whoisResponse.registry_data?.expiry_date;
-      const storedDate = getDateFromResponse(whoisResponse.whoisResponse as WhoisDateFields);
+      const storedDate = getDateFromResponse(
+        whoisResponse.whoisResponse as WhoisDateFields
+      );
 
-      console.log("Root level date:", rootDate);
-      console.log("Registry data date:", registryDate);
-      console.log("Stored WHOIS date:", storedDate);
+      logger.info("Root level date:", rootDate);
+      logger.info("Registry data date:", registryDate);
+      logger.info("Stored WHOIS date:", storedDate);
     } catch (error) {
-      console.error("WHOIS API lookup failed:", error);
+      logger.error("WHOIS API lookup failed:", error);
       return NextResponse.json(
         {
           success: false,
@@ -75,16 +88,16 @@ export async function GET() {
     }
 
     // Create a test domain entry
-    console.log(`\nCreating test domain entry for: ${testDomain}`);
+    logger.info(`\nCreating test domain entry for: ${testDomain}`);
     try {
       domain = await prisma.domain.upsert({
         where: { name: testDomain },
         create: { name: testDomain },
         update: {},
       });
-      console.log("Created domain:", domain);
+      logger.info("Created domain:", domain);
     } catch (error) {
-      console.error("Failed to create test domain:", error);
+      logger.error("Failed to create test domain:", error);
       const response: ApiResponse = {
         success: false,
         error: `Failed to create test domain: ${
@@ -96,7 +109,7 @@ export async function GET() {
     }
 
     // Test the WHOIS data fetch
-    console.log(`\nFetching WHOIS data for: ${testDomain}`);
+    logger.info(`\nFetching WHOIS data for: ${testDomain}`);
     try {
       if (!domain) {
         throw new Error("Domain not created");
@@ -104,11 +117,11 @@ export async function GET() {
       await DomainService.fetchWhoisDataInBackground(domain.id, domain.name);
 
       // Wait for the background task to complete
-      console.log("Waiting for background task to complete...");
+      logger.info("Waiting for background task to complete...");
       await new Promise((resolve) => setTimeout(resolve, 10000));
 
       // Get the updated domain
-      console.log("\nFetching updated domain...");
+      logger.info("\nFetching updated domain...");
       const updatedDomain = await prisma.domain.findUnique({
         where: { id: domain.id },
       });
@@ -117,7 +130,7 @@ export async function GET() {
         throw new Error("Domain not found after update");
       }
 
-      console.log("Updated domain data:", {
+      logger.info("Updated domain data:", {
         id: updatedDomain.id.toString(),
         name: updatedDomain.name,
         expiryDate: updatedDomain.domainExpiryDate,
@@ -151,7 +164,7 @@ export async function GET() {
       };
       return NextResponse.json(response);
     } catch (error) {
-      console.error("Failed to fetch WHOIS data:", error);
+      logger.error("Failed to fetch WHOIS data:", error);
       const response: ApiResponse = {
         success: false,
         error: `Failed to fetch WHOIS data: ${
@@ -162,7 +175,7 @@ export async function GET() {
       return NextResponse.json(response, { status: 500 });
     }
   } catch (error) {
-    console.error("WHOIS test failed:", error);
+    logger.error("WHOIS test failed:", error);
 
     // Clean up the test domain if it was created
     try {
@@ -170,10 +183,10 @@ export async function GET() {
         await prisma.domain.delete({
           where: { id: (domain as Domain).id },
         });
-        console.log("Cleaned up test domain");
+        logger.info("Cleaned up test domain");
       }
     } catch (cleanupError) {
-      console.error("Error cleaning up test domain:", cleanupError);
+      logger.error("Error cleaning up test domain:", cleanupError);
     }
 
     const errorMessage = error instanceof Error ? error.message : String(error);

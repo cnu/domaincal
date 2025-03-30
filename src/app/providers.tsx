@@ -6,6 +6,7 @@ import { Toaster } from "../components/ui/toaster";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import dynamic from "next/dynamic";
+import { SessionChangeHandler } from "@/components/session-change-handler";
 
 // Dynamically import ReactQueryDevtools to avoid build issues
 const ReactQueryDevtools = dynamic(
@@ -43,6 +44,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           disableTransitionOnChange
         >
           {children}
+          <SessionChangeHandler />
           <Toaster />
         </ThemeProvider>
         <ReactQueryDevtools initialIsOpen={false} />
