@@ -2,7 +2,9 @@ import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db";
-import { toast } from "@/components/ui/use-toast";
+
+// Cannot use client components (toast) in server components
+// Use proper error handling through NextAuth instead
 
 const handler = NextAuth({
   providers: [
@@ -14,28 +16,19 @@ const handler = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          toast({
-            id: "missing-cred",
-            title: "Error",
-            description: "Missing credentials",
-            variant: "destructive",
-          });
-          return null;
+          throw new Error("Missing credentials");
         }
+
+        const email = credentials.email.toLowerCase().trim();
 
         try {
           const user = await prisma.user.findUnique({
-            where: { email: credentials.email },
+            where: { email },
           });
 
+          // Don't reveal if the email exists - generic error for security
           if (!user) {
-            toast({
-              id: "invalid-email-pwd",
-              title: "Error",
-              description: "Invalid email or password",
-              variant: "destructive",
-            });
-            return null;
+            throw new Error("Invalid email or password");
           }
 
           const isValidPassword = await compare(
@@ -44,27 +37,26 @@ const handler = NextAuth({
           );
 
           if (!isValidPassword) {
-            toast({
-              id: "invalid-email-pwd",
-              title: "Error",
-              description: "Invalid email or password",
-              variant: "destructive",
-            });
+            throw new Error("Invalid email or password");
           }
 
+          // Update last login time
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { lastLoginAt: new Date() },
+          });
+
+          // Return the user object that matches the User interface in next-auth.d.ts
           return {
             id: user.id.toString(),
             email: user.email,
           };
         } catch (error) {
           console.error("Auth error:", error);
-          toast({
-            id: "invalid-cred",
-            title: "Error",
-            description: "Invalid Credentials",
-            variant: "destructive",
-          });
-          return null;
+          // Re-throw the error to be handled by NextAuth
+          throw new Error(
+            error instanceof Error ? error.message : "Authentication failed"
+          );
         }
       },
     }),
