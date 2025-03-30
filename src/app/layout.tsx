@@ -6,6 +6,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 import { PendingDomainsHandler } from "@/components/pending-domains-handler";
 import { PostHogProvider } from "@/components/PostHogProvider";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -44,6 +46,8 @@ export default function RootLayout({ children }: RootLayoutProps) {
                 {children}
                 <PendingDomainsHandler />
                 <Toaster />
+                <Analytics />
+                <SpeedInsights />
               </Providers>
             </PostHogProvider>
           ) : (
@@ -51,6 +55,8 @@ export default function RootLayout({ children }: RootLayoutProps) {
               {children}
               <PendingDomainsHandler />
               <Toaster />
+              <Analytics />
+              <SpeedInsights />
             </Providers>
           )}
         </ThemeProvider>
