@@ -8,6 +8,7 @@ import { PendingDomainsHandler } from "@/components/pending-domains-handler";
 import { PostHogProvider } from "@/components/PostHogProvider";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import EmailVerificationBannerWrapper from "@/components/EmailVerificationBannerWrapper";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -30,6 +31,17 @@ interface RootLayoutProps {
 }
 
 export default function RootLayout({ children }: RootLayoutProps) {
+  const content = (
+    <>
+      <EmailVerificationBannerWrapper />
+      {children}
+      <PendingDomainsHandler />
+      <Toaster />
+      <Analytics />
+      <SpeedInsights />
+    </>
+  );
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head />
@@ -42,22 +54,10 @@ export default function RootLayout({ children }: RootLayoutProps) {
         >
           {process.env.NODE_ENV === "production" ? (
             <PostHogProvider>
-              <Providers>
-                {children}
-                <PendingDomainsHandler />
-                <Toaster />
-                <Analytics />
-                <SpeedInsights />
-              </Providers>
+              <Providers>{content}</Providers>
             </PostHogProvider>
           ) : (
-            <Providers>
-              {children}
-              <PendingDomainsHandler />
-              <Toaster />
-              <Analytics />
-              <SpeedInsights />
-            </Providers>
+            <Providers>{content}</Providers>
           )}
         </ThemeProvider>
       </body>
