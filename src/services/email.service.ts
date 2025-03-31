@@ -8,7 +8,7 @@ export class EmailService {
 
         try {
             await resend.emails.send({
-                from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+                from: process.env.RESEND_FROM_EMAIL || 'domaincal@cruns.com',
                 to: email,
                 subject: 'Verify your email address',
                 html: `
@@ -33,7 +33,7 @@ export class EmailService {
 
         try {
             await resend.emails.send({
-                from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+                from: process.env.RESEND_FROM_EMAIL || 'domaincal@cruns.com',
                 to: email,
                 subject: 'Reminder: Verify your email address',
                 html: `
