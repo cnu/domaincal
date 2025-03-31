@@ -107,7 +107,7 @@ export const authOptions: NextAuthOptions = {
           });
 
           if (latestUser) {
-            token.emailVerified = latestUser.emailVerified;
+            token.emailVerified = !!latestUser.emailVerified;
           }
         } catch (error) {
           console.error("Error fetching latest user data:", error);

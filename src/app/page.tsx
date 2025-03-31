@@ -28,10 +28,14 @@ export default function Home() {
   // Check for verified parameter
   useEffect(() => {
     if (searchParams.get('verified') === 'true') {
-      setAuthView('login');
-      setIsAuthOpen(true);
+      toast({
+        id: uuidv4(),
+        title: "Email Verified",
+        description: "Your email has been verified successfully!",
+        variant: "default",
+      });
     }
-  }, [searchParams]);
+  }, [searchParams, toast]);
 
   // Listen for auth dialog events
   useEffect(() => {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signOut, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 
 export default function VerifyEmailPage() {
     const router = useRouter();
@@ -36,25 +36,11 @@ export default function VerifyEmailPage() {
 
                 setStatus('success');
 
-                // First update the session
+                // Update the session with the new verification status
                 await updateSession();
 
-                // Wait a moment to ensure the session update has propagated
-                await new Promise(resolve => setTimeout(resolve, 1000));
-
-                // Then sign out and redirect
-                await signOut({
-                    redirect: false,
-                });
-
-                // Wait another moment before redirecting
-                await new Promise(resolve => setTimeout(resolve, 1000));
-
-                // Redirect to home and trigger the login modal
+                // Redirect to home page
                 router.push('/?verified=true');
-                window.dispatchEvent(
-                    new CustomEvent('toggle-auth', { detail: { view: 'login' } })
-                );
             } catch (error) {
                 setStatus('error');
                 setError(error instanceof Error ? error.message : 'Verification failed');
@@ -83,7 +69,7 @@ export default function VerifyEmailPage() {
                         {status === 'success' && (
                             <div className="text-green-600">
                                 <p>Your email has been verified successfully!</p>
-                                <p className="mt-2 text-sm">Redirecting to login...</p>
+                                <p className="mt-2 text-sm">Redirecting to homepage...</p>
                             </div>
                         )}
                         {status === 'error' && (

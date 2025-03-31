@@ -65,7 +65,7 @@ export default function EmailVerificationBanner({ userId }: EmailVerificationBan
                             </svg>
                         </span>
                         <p className="ml-3 font-medium text-yellow-700">
-                            <span>Please verify your email address to access all features.</span>
+                            <span>Please verify your email address.</span>
                         </p>
                     </div>
                     <div className="flex-shrink-0 sm:ml-3">
@@ -73,19 +73,11 @@ export default function EmailVerificationBanner({ userId }: EmailVerificationBan
                             type="button"
                             onClick={handleResendVerification}
                             disabled={isResending}
-                            className="-mr-1 flex p-2 rounded-md focus:outline-none sm:ml-3 bg-yellow-50 hover:bg-yellow-100 focus:ring-2 focus:ring-yellow-600"
+                            className="-mr-1 flex p-2 rounded-md focus:outline-none sm:ml-3 bg-yellow-50 hover:bg-yellow-100 border-2  border-yellow-600"
                         >
                             <span className="text-yellow-800 text-sm font-medium">
                                 {isResending ? 'Sending...' : 'Resend verification email'}
                             </span>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setIsVisible(false)}
-                            className="-mr-1 flex p-2 rounded-md hover:bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-yellow-600 sm:ml-3"
-                        >
-                            <span className="sr-only">Dismiss</span>
-                            <XMarkIcon className="h-6 w-6 text-yellow-600" aria-hidden="true" />
                         </button>
                     </div>
                 </div>
