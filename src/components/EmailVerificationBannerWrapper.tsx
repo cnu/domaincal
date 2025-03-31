@@ -4,7 +4,7 @@ import { useSession } from 'next-auth/react';
 import EmailVerificationBanner from './EmailVerificationBanner';
 
 export default function EmailVerificationBannerWrapper() {
-    const { data: session, status } = useSession();
+    const { data: session } = useSession();
 
     if (!session?.user || session.user.emailVerified) {
         return null;

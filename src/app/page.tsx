@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
@@ -12,7 +13,7 @@ import { useAddDomains } from "@/hooks/use-domains";
 import { useToast } from "@/components/ui/use-toast";
 import { v4 as uuidv4 } from "uuid";
 
-export default function Home() {
+function HomeContent() {
   const { data: session } = useSession();
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [authView, setAuthView] = useState<"login" | "register">("register");
@@ -132,5 +133,17 @@ export default function Home() {
         isLoading={loginMutation.isPending || registerMutation.isPending}
       />
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }

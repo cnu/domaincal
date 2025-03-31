@@ -91,7 +91,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.email = user.email;
-        token.emailVerified = user.emailVerified;
+        token.emailVerified = !!user.emailVerified;
       }
 
       // On every token refresh, fetch the latest user data

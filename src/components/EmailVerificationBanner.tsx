@@ -1,14 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
 
 interface EmailVerificationBannerProps {
     userId: string;
 }
 
 export default function EmailVerificationBanner({ userId }: EmailVerificationBannerProps) {
-    const [isVisible, setIsVisible] = useState(true);
     const [isResending, setIsResending] = useState(false);
     const [resendError, setResendError] = useState('');
 
@@ -38,10 +36,6 @@ export default function EmailVerificationBanner({ userId }: EmailVerificationBan
             setIsResending(false);
         }
     };
-
-    if (!isVisible) {
-        return null;
-    }
 
     return (
         <div className="bg-yellow-50 border-b border-yellow-200">
