@@ -4,12 +4,15 @@ import { prisma } from "./db";
 import { compare, hash } from "bcryptjs";
 import { JWT } from "next-auth/jwt";
 import { AuthService } from "@/services/auth.service";
+import crypto from "crypto";
+import { EmailService } from "@/services/email.service";
 
 interface CustomSession extends Session {
   user: {
     id: string;
     email: string;
     name?: string | null;
+    emailVerified: boolean;
   };
   pendingDomains?: string[];
 }
@@ -17,6 +20,7 @@ interface CustomSession extends Session {
 interface CustomToken extends JWT {
   id: string;
   email: string;
+  emailVerified: boolean;
 }
 
 export const authOptions: NextAuthOptions = {
@@ -39,16 +43,24 @@ export const authOptions: NextAuthOptions = {
 
           if (!user) {
             const hashedPassword = await hash(credentials.password, 10);
+            const verificationToken = crypto.randomBytes(32).toString('hex');
+
             const newUser = await prisma.user.create({
               data: {
                 email: credentials.email,
                 password: hashedPassword,
+                emailVerified: false,
+                verificationToken,
               },
             });
+
+            // Send verification email
+            await EmailService.sendVerificationEmail(credentials.email, verificationToken);
 
             return {
               id: newUser.id.toString(),
               email: newUser.email,
+              emailVerified: false,
             };
           }
 
@@ -64,6 +76,7 @@ export const authOptions: NextAuthOptions = {
           return {
             id: user.id.toString(),
             email: user.email,
+            emailVerified: user.emailVerified,
           };
         } catch (error) {
           console.error("Auth error:", error);
@@ -73,11 +86,34 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }): Promise<CustomToken> {
+    async jwt({ token, user, trigger }): Promise<CustomToken> {
+      // If this is a sign in operation, use the user object
       if (user) {
         token.id = user.id;
         token.email = user.email;
+        token.emailVerified = user.emailVerified;
       }
+
+      // On every token refresh, fetch the latest user data
+      if (trigger === "update" || trigger === "signIn") {
+        try {
+          const latestUser = await prisma.user.findUnique({
+            where: { id: BigInt(token.id as string) },
+            select: {
+              id: true,
+              email: true,
+              emailVerified: true,
+            },
+          });
+
+          if (latestUser) {
+            token.emailVerified = !!latestUser.emailVerified;
+          }
+        } catch (error) {
+          console.error("Error fetching latest user data:", error);
+        }
+      }
+
       return token as CustomToken;
     },
     async session({ session, token }): Promise<CustomSession> {
@@ -85,6 +121,7 @@ export const authOptions: NextAuthOptions = {
         const customToken = token as CustomToken;
         session.user.id = customToken.id;
         session.user.email = customToken.email;
+        session.user.emailVerified = customToken.emailVerified;
 
         const customSession = session as CustomSession;
         if (customSession.pendingDomains?.length) {
@@ -106,13 +143,14 @@ export const authOptions: NextAuthOptions = {
           ...session.user,
           id: (token as CustomToken).id,
           email: (token as CustomToken).email,
+          emailVerified: (token as CustomToken).emailVerified,
         },
       } as CustomSession;
     },
   },
   pages: {
-    signIn: "/auth/signin",
-    error: "/auth/error",
+    signIn: "/",
+    error: "/",
   },
   session: {
     strategy: "jwt",

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import { DomainInput } from "@/components/domain-input";
 import { DomainList } from "@/components/domain-list";
 import { AuthDialog } from "@/components/auth/auth-dialog";
@@ -17,11 +18,24 @@ export default function Home() {
   const [authView, setAuthView] = useState<"login" | "register">("register");
   const [refreshDomainList, setRefreshDomainList] = useState(0);
   const { toast } = useToast();
+  const searchParams = useSearchParams();
 
   // Use TanStack Query hooks
   const loginMutation = useLogin();
   const registerMutation = useRegister();
   const addDomainsMutation = useAddDomains();
+
+  // Check for verified parameter
+  useEffect(() => {
+    if (searchParams.get('verified') === 'true') {
+      toast({
+        id: uuidv4(),
+        title: "Email Verified",
+        description: "Your email has been verified successfully!",
+        variant: "default",
+      });
+    }
+  }, [searchParams, toast]);
 
   // Listen for auth dialog events
   useEffect(() => {

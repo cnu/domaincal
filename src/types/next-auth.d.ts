@@ -5,6 +5,7 @@ declare module "next-auth" {
     user: {
       id: string
       email: string
+      emailVerified: boolean
     }
     pendingDomains?: string[]
   }
@@ -12,5 +13,6 @@ declare module "next-auth" {
   interface User {
     id: string
     email: string
+    emailVerified: boolean
   }
 }

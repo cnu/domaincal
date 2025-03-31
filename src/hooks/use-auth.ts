@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useToast } from "@/components/ui/use-toast";
 import { v4 as uuidv4 } from "uuid";
 import { apiClient } from "@/lib/api-client";
@@ -23,6 +23,7 @@ interface AuthCredentials {
 export const useLogin = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { update: updateSession } = useSession();
 
   return useMutation({
     mutationFn: async ({ email, password }: AuthCredentials) => {
@@ -38,10 +39,13 @@ export const useLogin = () => {
 
       return result;
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Update the session to get the latest data
+      await updateSession();
+
       // Invalidate relevant queries to refresh data after login
       queryClient.invalidateQueries({ queryKey: authKeys.session() });
-      
+
       toast({
         id: uuidv4(),
         title: "Success",
@@ -76,10 +80,10 @@ export const useRegister = () => {
     onSuccess: async ({ email, password }) => {
       // Invalidate any auth-related queries
       queryClient.invalidateQueries({ queryKey: authKeys.all });
-      
+
       // After successful registration, log the user in
       await loginMutation.mutateAsync({ email, password });
-      
+
       toast({
         id: uuidv4(),
         title: "Registration Successful",

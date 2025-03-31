@@ -24,18 +24,18 @@ export function Nav() {
   const handleLogout = async () => {
     // Clear all user and domain data from local storage before logout
     localStorage.clear();
-    
+
     // You can also use more specific clearing if needed:
     // localStorage.removeItem('next-auth.session-token');
     // localStorage.removeItem('domaincal-user-data');
     // localStorage.removeItem('domaincal-domains-data');
-    
+
     // Log the user out
     await signOut({ redirect: false })
   }
 
   return (
-    <nav className="border-b">
+    <nav>
       <div className="container mx-auto px-4 py-4 flex justify-between items-center">
         <Logo />
         <div className="flex items-center gap-4">
@@ -44,8 +44,8 @@ export function Nav() {
               <span className="text-sm text-muted-foreground">
                 {session.user.email}
               </span>
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 onClick={handleLogout}
                 aria-label="Logout"
               >
@@ -54,15 +54,15 @@ export function Nav() {
             </>
           ) : (
             <div className="flex gap-2">
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 onClick={handleLoginClick}
                 aria-label="Open login dialog"
               >
                 Login
               </Button>
-              <Button 
-                variant="default" 
+              <Button
+                variant="default"
                 onClick={handleRegisterClick}
                 aria-label="Open register dialog"
               >
