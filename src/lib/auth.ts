@@ -1,11 +1,9 @@
 import { NextAuthOptions, Session } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./db";
-import { compare, hash } from "bcryptjs";
+import { compare } from "bcryptjs";
 import { JWT } from "next-auth/jwt";
 import { AuthService } from "@/services/auth.service";
-import crypto from "crypto";
-import { EmailService } from "@/services/email.service";
 
 interface CustomSession extends Session {
   user: {
@@ -41,27 +39,10 @@ export const authOptions: NextAuthOptions = {
             where: { email: credentials.email },
           });
 
+          // If user doesn't exist, return null instead of creating a new user
+          // This ensures login and registration flows are properly separated
           if (!user) {
-            const hashedPassword = await hash(credentials.password, 10);
-            const verificationToken = crypto.randomBytes(32).toString('hex');
-
-            const newUser = await prisma.user.create({
-              data: {
-                email: credentials.email,
-                password: hashedPassword,
-                emailVerified: false,
-                verificationToken,
-              },
-            });
-
-            // Send verification email
-            await EmailService.sendVerificationEmail(credentials.email, verificationToken);
-
-            return {
-              id: newUser.id.toString(),
-              email: newUser.email,
-              emailVerified: false,
-            };
+            return null;
           }
 
           const isPasswordValid = await compare(

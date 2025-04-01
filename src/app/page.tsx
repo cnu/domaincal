@@ -26,15 +26,23 @@ function HomeContent() {
   const registerMutation = useRegister();
   const addDomainsMutation = useAddDomains();
 
-  // Check for verified parameter
+  // Check for verified parameter and remove it after showing toast
   useEffect(() => {
-    if (searchParams.get('verified') === 'true') {
+    if (searchParams.get("verified") === "true") {
+      // Show success toast
       toast({
         id: uuidv4(),
         title: "Email Verified",
         description: "Your email has been verified successfully!",
         variant: "default",
       });
+
+      // Replace URL without the verified parameter to clean it up
+      // Use setTimeout to ensure the toast is displayed before the URL changes
+      const timeoutId = setTimeout(() => {
+        window.history.replaceState({}, "", window.location.pathname);
+      }, 100);
+      return () => clearTimeout(timeoutId);
     }
   }, [searchParams, toast]);
 
@@ -138,11 +146,13 @@ function HomeContent() {
 
 export default function Home() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        </div>
+      }
+    >
       <HomeContent />
     </Suspense>
   );

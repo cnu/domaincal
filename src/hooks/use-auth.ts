@@ -53,10 +53,16 @@ export const useLogin = () => {
       });
     },
     onError: (error: Error) => {
+      // Check if error message indicates an unknown user
+      const isUnknownUserError = error.message?.includes("CredentialsSignin") || 
+                                 error.message?.includes("credentials");
+
       toast({
         id: uuidv4(),
         title: "Login Failed",
-        description: error.message || "Failed to login",
+        description: isUnknownUserError 
+          ? "Email address not registered. Please check your email or create a new account." 
+          : error.message || "Failed to login",
         variant: "destructive",
       });
     },
