@@ -498,56 +498,40 @@ export function DomainList({
                     </div>
                   </>
                 ) : (
-                  <>
-                    <div
-                      className="text-sm"
-                      style={{
-                        color:
-                          domain.lastRefreshedAt &&
-                          domain.response &&
-                          typeof domain.response === "object" &&
-                          (domain.response as WhoisResponse)
-                            .domain_registered === "no"
-                            ? "#22c55e"
-                            : domain.lastRefreshedAt
-                              ? "#f59e0b"
-                              : "#6b7280",
-                      }}
-                    >
-                      {domain.response &&
-                      typeof domain.response === "object" &&
-                      (domain.response as WhoisResponse).domain_registered ===
-                        "no"
-                        ? "Domain"
-                        : "Status"}
+                  domain.response &&
+                  typeof domain.response === "object" &&
+                  (domain.response as WhoisResponse).domain_registered === "no" ? (
+                    // Green dot for unregistered domains
+                    <div className="flex items-center justify-center h-full">
+                      <div 
+                        className="rounded-full bg-green-500" 
+                        style={{ width: '24px', height: '24px' }}
+                      />
                     </div>
-                    <div
-                      className="font-bold"
-                      style={{
-                        color:
-                          domain.lastRefreshedAt &&
-                          domain.response &&
-                          typeof domain.response === "object" &&
-                          (domain.response as WhoisResponse)
-                            .domain_registered === "no"
-                            ? "#22c55e"
-                            : domain.lastRefreshedAt
-                              ? "#f59e0b"
-                              : "#6b7280",
-                      }}
-                    >
-                      {!domain.lastRefreshedAt
-                        ? "Not checked"
-                        : hasApiError
-                          ? "API Error"
-                          : domain.response &&
-                              typeof domain.response === "object" &&
-                              (domain.response as WhoisResponse)
-                                .domain_registered === "no"
-                            ? "Not registered"
+                  ) : (
+                    <>
+                      <div
+                        className="text-sm"
+                        style={{
+                          color: domain.lastRefreshedAt ? "#f59e0b" : "#6b7280",
+                        }}
+                      >
+                        Status
+                      </div>
+                      <div
+                        className="font-bold"
+                        style={{
+                          color: domain.lastRefreshedAt ? "#f59e0b" : "#6b7280",
+                        }}
+                      >
+                        {!domain.lastRefreshedAt
+                          ? "Not checked"
+                          : hasApiError
+                            ? "API Error"
                             : "Unknown"}
-                    </div>
-                  </>
+                      </div>
+                    </>
+                  )
                 )}
               </div>
             </div>
