@@ -4,13 +4,25 @@ import { logger } from "@/lib/logger";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+interface ExpiringDomain {
+  name: string;
+  expiryDate: Date;
+  daysUntilExpiry: number;
+}
+
+interface UserDomains {
+  email: string;
+  emailVerified: boolean;
+  expiringDomains: ExpiringDomain[];
+}
+
 export class EmailAlertService {
-  private static readonly ALERT_DAYS = [14, 7, 1];
+  private static readonly ALERT_DAYS = [7, 1, 0];
 
   /**
    * Check all domains for upcoming expiry dates and send alerts if needed
    */
-  static async checkAndSendAlerts(): Promise<void> {
+  public static async checkAndSendEmailAlerts(): Promise<void> {
     try {
       // Get all active domains with expiry dates and user information
       const domains = await prisma.domain.findMany({
@@ -19,13 +31,9 @@ export class EmailAlertService {
             not: null,
           },
         },
-        select: {
-          id: true,
-          name: true,
-          domainExpiryDate: true,
+        include: {
           users: {
-            select: {
-              userId: true,
+            include: {
               user: {
                 select: {
                   email: true,
@@ -37,68 +45,51 @@ export class EmailAlertService {
         },
       });
 
-      // Type assertion to match our expected structure
-      const typedDomains = domains as Array<{
-        id: bigint;
-        name: string;
-        domainExpiryDate: Date | null;
-        users: Array<{
-          userId: bigint;
-          user: {
-            email: string;
-            emailVerified: boolean;
-          };
-        }>;
-      }>;
+      // Group domains by user
+      const userDomains: Map<string, UserDomains> = new Map();
 
-      for (const domain of typedDomains) {
-        await this.processDomainAlerts(domain);
+      for (const domain of domains) {
+        if (!domain.domainExpiryDate) continue;
+
+        const daysUntilExpiry = Math.ceil(
+          (domain.domainExpiryDate.getTime() - new Date().getTime()) /
+            (1000 * 60 * 60 * 24)
+        );
+
+        if (!this.shouldSendAlert(daysUntilExpiry)) continue;
+
+        const expiringDomain: ExpiringDomain = {
+          name: domain.name,
+          expiryDate: domain.domainExpiryDate,
+          daysUntilExpiry,
+        };
+
+        // Add domain to each user's list
+        for (const userDomain of domain.users) {
+          const userEmail = userDomain.user.email;
+          if (!userDomains.has(userEmail)) {
+            userDomains.set(userEmail, {
+              email: userEmail,
+              emailVerified: userDomain.user.emailVerified,
+              expiringDomains: [],
+            });
+          }
+          const userData = userDomains.get(userEmail);
+          if (userData) {
+            userData.expiringDomains.push(expiringDomain);
+          }
+        }
+      }
+
+      // Send a single email to each user with all their expiring domains
+      for (const userData of userDomains.values()) {
+        if (userData.expiringDomains.length > 0) {
+          await this.sendExpiryAlertBatch(userData);
+        }
       }
     } catch (error) {
-      logger.error("Error checking and sending email alerts:", error);
+      logger.error("Error checking domain expiry dates:", error);
       throw error;
-    }
-  }
-
-  /**
-   * Process alerts for a single domain
-   */
-  private static async processDomainAlerts(domain: {
-    id: bigint;
-    name: string;
-    domainExpiryDate: Date | null;
-    users: Array<{
-      userId: bigint;
-      user: {
-        email: string;
-        emailVerified: boolean;
-      };
-    }>;
-  }): Promise<void> {
-    // Skip domains without expiry date
-    if (!domain.domainExpiryDate) {
-      return;
-    }
-
-    const daysUntilExpiry = Math.ceil(
-      (domain.domainExpiryDate.getTime() - new Date().getTime()) /
-        (1000 * 60 * 60 * 24)
-    );
-
-    // Check if we need to send an alert for this domain
-    if (!this.shouldSendAlert(daysUntilExpiry)) {
-      return;
-    }
-
-    // Send alert to all users associated with this domain
-    for (const user of domain.users) {
-      await this.sendExpiryAlert(
-        user.user.email,
-        user.user.emailVerified ? user.user.email : null,
-        domain.name,
-        domain.domainExpiryDate,
-        daysUntilExpiry
-      );
     }
   }
 
@@ -110,65 +101,67 @@ export class EmailAlertService {
   }
 
   /**
-   * Send an expiry alert email
+   * Send a batch expiry alert for multiple domains to a single user
    */
-  private static async sendExpiryAlert(
-    email: string,
-    name: string | null,
-    domainName: string,
-    expiryDate: Date,
-    daysUntilExpiry: number
+  private static async sendExpiryAlertBatch(
+    userData: UserDomains
   ): Promise<void> {
     try {
-      const formattedExpiryDate = expiryDate.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
+      // Sort domains by days until expiry
+      const sortedDomains = [...userData.expiringDomains].sort(
+        (a, b) => a.daysUntilExpiry - b.daysUntilExpiry
+      );
+
+      // Create HTML table for domains
+      const domainsTable = `
+        <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+          <thead>
+            <tr style="background-color: #f8f9fa;">
+              <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Domain Name</th>
+              <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Expiry Date</th>
+              <th style="border: 1px solid #dee2e6; padding: 12px; text-align: left;">Days Remaining</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sortedDomains
+              .map(
+                (domain) => `
+              <tr>
+                <td style="border: 1px solid #dee2e6; padding: 12px;">${
+                  domain.name
+                }</td>
+                <td style="border: 1px solid #dee2e6; padding: 12px;">${domain.expiryDate.toLocaleDateString()}</td>
+                <td style="border: 1px solid #dee2e6; padding: 12px;">${
+                  domain.daysUntilExpiry
+                } days</td>
+              </tr>
+            `
+              )
+              .join("")}
+          </tbody>
+        </table>
+      `;
 
       await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || "domaincal@cruns.com",
-        to: email,
-        subject: `Domain Expiry Alert: ${domainName} expires in ${daysUntilExpiry} day(s)`,
+        from: process.env.RESEND_FROM_EMAIL!,
+        replyTo: userData.emailVerified ? userData.email : undefined,
+        to: userData.email,
+        subject: `Domain Expiry Alert: Multiple Domains Expiring Soon`,
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h1 style="color: #333; margin-bottom: 20px;">Domain Expiry Alert</h1>
-            
-            <p style="color: #666; margin-bottom: 15px;">Dear ${name || "User"},</p>
-            
-            <p style="color: #666; margin-bottom: 15px;">
-              This is a reminder that your domain <strong>${domainName}</strong> will expire in <strong>${daysUntilExpiry} day(s)</strong> on ${formattedExpiryDate}.
-            </p>
-            
-            <p style="color: #666; margin-bottom: 20px;">
-              Please ensure you renew your domain before the expiry date to avoid any service disruptions.
-            </p>
-            
-            <p style="color: #666; margin-bottom: 15px;">
-              You can track your domain's status and manage your domains at <a href="${
-                process.env.NEXT_PUBLIC_APP_URL
-              }">${process.env.NEXT_PUBLIC_APP_URL}</a>.
-            </p>
-            
-            <p style="color: #666; margin-bottom: 15px;">
-              Thank you for using DomainCal.
-            </p>
-            
-            <hr style="border: none; border-top: 1px solid #eee; margin: 25px 0;">
-            
-            <p style="color: #999; font-size: 12px;">
-              This is an automated message. Please do not reply to this email.
-            </p>
-          </div>
+          <h2>Domain Expiry Alerts</h2>
+          <p>The following domains are expiring soon:</p>
+          ${domainsTable}
+          <p>Please take necessary action to renew these domains if needed.</p>
+          <p>You can track your domain's status and manage your domains at <a href="${process.env.NEXT_PUBLIC_APP_URL}">${process.env.NEXT_PUBLIC_APP_URL}</a>.</p>
         `,
       });
 
       logger.info(
-        `Sent expiry alert for domain ${domainName} to ${email} (${daysUntilExpiry} days remaining)`
+        `Sent batch expiry alert to ${userData.email} for ${sortedDomains.length} domains`
       );
     } catch (error) {
       logger.error(
-        `Error sending expiry alert for domain ${domainName} to ${email}:`,
+        `Error sending batch expiry alert to ${userData.email}:`,
         error
       );
       throw error;

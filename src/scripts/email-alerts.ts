@@ -1,11 +1,11 @@
-import { EmailAlertService } from '../services/email-alert.service';
+import { EmailAlertService } from "../services/email-alert.service";
 
 async function main() {
   try {
-    await EmailAlertService.checkAndSendAlerts();
-    console.log('Email alerts check completed successfully');
+    await EmailAlertService.checkAndSendEmailAlerts();
+    console.log("Email alerts check completed successfully");
   } catch (error) {
-    console.error('Error running email alerts:', error);
+    console.error("Error running email alerts:", error);
     process.exit(1);
   }
 }
