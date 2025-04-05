@@ -1,0 +1,42 @@
+name: Email Alerts
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # Run at midnight UTC
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  send-email-alerts:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
+      NODE_ENV: production
+      NEXTAUTH_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+    environment: production
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
+      - name: Build application
+        run: npm run build
+
+      - name: Run email alerts
+        run: npm run email-alerts
