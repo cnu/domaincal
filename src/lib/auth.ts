@@ -4,6 +4,7 @@ import { prisma } from "./db";
 import { compare } from "bcryptjs";
 import { JWT } from "next-auth/jwt";
 import { AuthService } from "@/services/auth.service";
+import NextAuth from "next-auth";
 
 interface CustomSession extends Session {
   user: {
@@ -39,8 +40,6 @@ export const authOptions: NextAuthOptions = {
             where: { email: credentials.email },
           });
 
-          // If user doesn't exist, return null instead of creating a new user
-          // This ensures login and registration flows are properly separated
           if (!user) {
             return null;
           }
@@ -68,14 +67,12 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async jwt({ token, user, trigger }): Promise<CustomToken> {
-      // If this is a sign in operation, use the user object
       if (user) {
         token.id = user.id;
         token.email = user.email;
         token.emailVerified = !!user.emailVerified;
       }
 
-      // On every token refresh, fetch the latest user data
       if (trigger === "update" || trigger === "signIn") {
         try {
           const latestUser = await prisma.user.findUnique({
@@ -130,10 +127,11 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: {
-    signIn: "/",
-    error: "/",
+    signIn: "/api/auth/signin",
   },
   session: {
     strategy: "jwt",
   },
 };
+
+export const { getServerSession } = NextAuth(authOptions);
