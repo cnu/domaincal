@@ -140,59 +140,70 @@ export class EmailAlertService {
         </table>
       `;
 
-      const getExpiryMessage = (daysUntilExpiry: number): string => {
-        if (daysUntilExpiry <= 0) {
-          return `
-            <div style="background-color: #fee2e2; border: 1px solid #ef4444; padding: 12px; margin: 12px 0; border-radius: 4px;">
-              <strong>⚠️ Critical: Domain Expired</strong>
-              <ul style="margin: 8px 0;">
-                <li>Your domain will be suspended in 10 days if not renewed</li>
-                <li>After suspension, domain and attached services will stop functioning</li>
-                <li>Domain will be sent to auction after 26 days</li>
-                <li>You have up to 30 days to renew before permanent removal</li>
-              </ul>
-            </div>
-          `;
-        } else if (daysUntilExpiry <= 1) {
-          return `
-            <div style="background-color: #fef2f2; border: 1px solid #f87171; padding: 12px; margin: 12px 0; border-radius: 4px;">
-              <strong>🚨 Urgent: Domain Expires Tomorrow</strong>
-              <p>Immediate renewal required to avoid service interruption.</p>
-            </div>
-          `;
-        } else if (daysUntilExpiry <= 7) {
-          return `
-            <div style="background-color: #fff7ed; border: 1px solid #fb923c; padding: 12px; margin: 12px 0; border-radius: 4px;">
-              <strong>⚠️ Warning: Domain Expiring Soon</strong>
-              <p>Please renew your domain before expiration to avoid service interruption and potential loss of domain ownership.</p>
-            </div>
-          `;
+      // Helper to get the highest severity among all domains
+      const getHighestSeverity = (
+        domains: ExpiringDomain[]
+      ): "critical" | "urgent" | "warning" | null => {
+        let hasCritical = false;
+        let hasUrgent = false;
+        let hasWarning = false;
+        for (const d of domains) {
+          if (d.daysUntilExpiry <= 0) hasCritical = true;
+          else if (d.daysUntilExpiry <= 1) hasUrgent = true;
+          else if (d.daysUntilExpiry <= 7) hasWarning = true;
         }
-        return '';
+        if (hasCritical) return "critical";
+        if (hasUrgent) return "urgent";
+        if (hasWarning) return "warning";
+        return null;
       };
+
+      const getExpiryMessage = (
+        severity: "critical" | "urgent" | "warning" | null
+      ): string => {
+        if (severity === "critical") {
+          return `
+      <div style="background-color: #fee2e2; border: 1px solid #ef4444; padding: 12px; margin: 12px 0; border-radius: 4px;">
+        <strong>🚨 Critical: Domain Expired</strong>
+        <ul style="margin: 8px 0;">
+          <li>Your domain will be suspended soon if not renewed.</li>
+          <li>After suspension, domain and attached services will stop functioning.</li>
+        </ul>
+      </div>
+    `;
+        } else if (severity === "urgent") {
+          return `
+      <div style="background-color: #fef2f2; border: 1px solid #f87171; padding: 12px; margin: 12px 0; border-radius: 4px;">
+        <strong>⚠️ Urgent: Domain Expires Tomorrow</strong>
+        <p>Immediate renewal required to avoid service interruption.</p>
+      </div>
+    `;
+        } else if (severity === "warning") {
+          return `
+      <div style="background-color: #fff7ed; border: 1px solid #fb923c; padding: 12px; margin: 12px 0; border-radius: 4px;">
+        <strong>⚠️ Warning: Domain Expiring Soon</strong>
+        <p>Please renew your domain before expiration to avoid service interruption and potential loss of domain ownership.</p>
+      </div>
+    `;
+        }
+        return "";
+      };
+
+      const highestSeverity = getHighestSeverity(sortedDomains);
 
       await resend.emails.send({
         from: process.env.RESEND_FROM_EMAIL!,
         replyTo: userData.emailVerified ? userData.email : undefined,
         to: userData.email,
-        subject: `Domain Expiry Alert: Multiple Domains Expiring Soon`,
+        subject: `Domain Expiry Alert: ${sortedDomains.length} Domains Expiring Soon`,
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #1f2937;">Domain Expiry Alerts</h2>
-            
-            ${sortedDomains.map(domain => getExpiryMessage(domain.daysUntilExpiry)).join('')}
-            
-            <p>The following domains require your attention:</p>
-            ${domainsTable}
-            
-            <div style="margin-top: 20px; padding: 15px; background-color: #f8f9fa; border: 1px solid #dee2e6;">
-              <h3 style="color: #333; margin-top: 0;">DID YOU KNOW?</h3>
-              <p>Once your domain expires it will eventually get deleted and any services you have attached to it, such as a website or a custom email address, will stop working. If you don't renew your domain, it will be released to the public and anyone will be able to purchase it.</p>
-            </div>
-            
-            <p style="margin-top: 20px;">You can track your domain's status and manage your domains at <a href="${process.env.NEXT_PUBLIC_APP_URL}" style="color: #0066cc;">${process.env.NEXT_PUBLIC_APP_URL}</a>.</p>
-          </div>
-        `,
+    <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px;">
+      <h2 style="color: #1f2937;">DomainCal</h2>
+      ${getExpiryMessage(highestSeverity)}
+      <p>The following domains require your attention:</p>
+      ${domainsTable}
+    </div>
+  `,
       });
 
       logger.info(
